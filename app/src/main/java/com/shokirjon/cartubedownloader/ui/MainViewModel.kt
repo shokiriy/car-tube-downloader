@@ -32,7 +32,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val message = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
+    private val _playlistReady = MutableStateFlow(false)
+    val playlistReady = _playlistReady.asStateFlow()
     var inputText = ""
+    private var analyzedText = ""
     var outputKind = OutputKind.MP3
     var audioQuality = AudioQuality.K192
     var videoQuality = VideoQuality.P480
@@ -45,10 +48,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun analyze() = viewModelScope.launch(Dispatchers.IO) {
         analysisMutex.withLock {
             _busy.value = true
+            _previews.value = emptyList()
+            _playlistReady.value = false
+            analyzedText = ""
+            _message.value = "Havola tahlil qilinmoqda…"
             try {
-                val urls = YouTubeUrlParser.parseMany(inputText)
-                val invalid = inputText.lineSequence().map(String::trim).filter(String::isNotBlank).count { runCatching { YouTubeUrlParser.parse(it) }.isFailure }
-                if (urls.isEmpty()) { _message.value = "Enter a supported public YouTube video or playlist URL."; return@withLock }
+                val sourceText = inputText
+                val urls = YouTubeUrlParser.parseMany(sourceText)
+                val invalid = sourceText.lineSequence().map(String::trim).filter(String::isNotBlank).count { runCatching { YouTubeUrlParser.parse(it) }.isFailure }
+                if (urls.isEmpty()) { _message.value = "YouTube video yoki pleylist havolasini kiriting."; return@withLock }
                 val found = ArrayList<Preview>()
                 var failed = invalid; var playlistCount = 0
                 for (target in urls) {
@@ -59,19 +67,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 app.playlists.add(target.canonicalUrl)
                                 app.playlists.sync(target.id)
                                 playlistCount++
+                                _playlistReady.value = true
                             }
                         }
                         _previews.value = found.toList()
-                        _message.value = "Analyzed ${found.size} videos; loaded $playlistCount playlists; $failed failed."
-                    } catch (e: Exception) { failed++; _message.value = e.message ?: "Could not analyze this URL." }
+                        _message.value = "${found.size} ta video topildi, $playlistCount ta pleylist yuklandi, $failed ta xato. Formatni tanlab yuklang."
+                    } catch (e: Exception) { failed++; _message.value = e.message ?: "Havolani tahlil qilib bo‘lmadi." }
                 }
+                analyzedText = sourceText
             } finally { _busy.value = false }
         }
     }
+    fun analysisMatchesInput() = inputText == analyzedText
     fun selectAll(value: Boolean) { _previews.value = _previews.value.map { it.copy(selected = value) } }
     fun select(index: Int, value: Boolean) { _previews.value = _previews.value.mapIndexed { i, p -> if (i == index) p.copy(selected = value) else p } }
     fun removeSelected() { _previews.value = _previews.value.filterNot { it.selected } }
     fun queueSelected() = viewModelScope.launch(Dispatchers.IO) {
+        if (!analysisMatchesInput()) { _message.value = "Havola o‘zgardi. Qayta tahlil qiling."; return@launch }
         val picked = _previews.value.filter { it.selected }
         var added = 0; var duplicates = 0
         for (p in picked) {

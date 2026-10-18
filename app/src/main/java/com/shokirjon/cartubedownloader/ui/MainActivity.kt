@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
@@ -36,6 +37,7 @@ import java.util.Date
 class MainActivity : AppCompatActivity() {
     private val vm: MainViewModel by lazy { ViewModelProvider(this)[MainViewModel::class.java] }
     private lateinit var root: LinearLayout
+    private lateinit var tabs: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
     private var page = 0
@@ -57,24 +59,38 @@ class MainActivity : AppCompatActivity() {
     private val panel = Color.rgb(17, 32, 45)
     private val ink = Color.rgb(235, 245, 250)
     private val accent = Color.rgb(65, 202, 187)
+    private val portrait get() = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        page = savedInstanceState?.getInt("page") ?: 0
+        playlistId = savedInstanceState?.getString("playlistId")
+        playlistOffset = savedInstanceState?.getInt("playlistOffset") ?: 0
+        search = savedInstanceState?.getString("search").orEmpty()
+        libraryVideo = savedInstanceState?.getBoolean("libraryVideo") ?: false
+        playlistUrl = savedInstanceState?.getString("playlistUrl").orEmpty()
         window.statusBarColor = Color.rgb(9, 20, 29)
         window.navigationBarColor = Color.rgb(9, 20, 29)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(9, 20, 29)) }
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(panel) }
-        listOf("Download", "Queue", "Library", "Playlists", "Settings").forEachIndexed { i, name ->
-            tabs.addView(button(name) { page = i; render() }, LinearLayout.LayoutParams(0, 56.dp, 1f))
+        tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(panel) }
+        listOf("Yuklash", "Navbat", "Fayllar", "Pleylist", "Sozlamalar").forEachIndexed { i, name ->
+            tabs.addView(button(name) { navigate(i) }.apply {
+                minWidth = 0
+                minimumWidth = 0
+                textSize = if (portrait) 10f else 13f
+                setPadding(1.dp, 0, 1.dp, 0)
+                alpha = if (page == i) 1f else 0.7f
+            }, LinearLayout.LayoutParams(0, 56.dp, 1f))
         }
-        root.addView(tabs)
-        status = label("Ready", 14f).apply { setPadding(14.dp, 6.dp, 14.dp, 6.dp); maxLines = 2 }
+        if (!portrait) root.addView(tabs)
+        status = label("Havolani qo‘ying va tahlil qiling", 14f).apply { setPadding(14.dp, 6.dp, 14.dp, 6.dp); maxLines = 3 }
         root.addView(status)
         val scroll = ScrollView(this).apply { isFillViewport = true }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14.dp, 8.dp, 14.dp, 20.dp) }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        if (portrait) root.addView(tabs)
         setContentView(root)
-        if (intent?.action == Intent.ACTION_SEND) vm.inputText = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        if (savedInstanceState == null && intent?.action == Intent.ACTION_SEND) vm.inputText = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
         render()
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) {
             launch { vm.tasks.collect { if (page == 1 || page == 2) render() } }
@@ -82,18 +98,33 @@ class MainActivity : AppCompatActivity() {
             launch { vm.playlists.collect { if (page == 3 && playlistId == null) render() } }
             launch { vm.settings.collect { if (page == 4) render() } }
             launch { vm.message.collect { if (it.isNotBlank()) status.text = it } }
-            launch { vm.busy.collect { status.alpha = if (it) 0.55f else 1f } }
+            launch { vm.busy.collect { if (page == 0) render() } }
         } }
+    }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("page", page)
+        outState.putString("playlistId", playlistId)
+        outState.putInt("playlistOffset", playlistOffset)
+        outState.putString("search", search)
+        outState.putBoolean("libraryVideo", libraryVideo)
+        outState.putString("playlistUrl", playlistUrl)
+        super.onSaveInstanceState(outState)
     }
     private fun render() {
         if (!::content.isInitialized) return
         content.removeAllViews()
         when (page) { 0 -> download(); 1 -> queue(); 2 -> library(); 3 -> playlists(); else -> settings() }
     }
+    private fun navigate(destination: Int) {
+        page = destination
+        for (i in 0 until tabs.childCount) tabs.getChildAt(i).alpha = if (i == page) 1f else 0.7f
+        render()
+    }
     private fun download() {
-        heading("Download authorized public media")
+        heading("YouTube’dan yuklash")
+        paragraph("1. O‘zingizga ruxsat etilgan ommaviy video havolasini joylashtiring. Bir nechta bo‘lsa, har birini alohida qatorga yozing.")
         val input = EditText(this).apply {
-            setText(vm.inputText); hint = "Paste YouTube links — one per line"; setTextColor(ink); setHintTextColor(0xff99aab2.toInt())
+            setText(vm.inputText); hint = "YouTube havolasini shu yerga qo‘ying"; setTextColor(ink); setHintTextColor(0xff99aab2.toInt())
             minLines = 2; maxLines = 5; inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setBackgroundColor(panel); setPadding(12.dp, 8.dp, 12.dp, 8.dp)
             addTextChangedListener(object : android.text.TextWatcher {
@@ -104,14 +135,32 @@ class MainActivity : AppCompatActivity() {
         }
         content.addView(input, LinearLayout.LayoutParams(-1, -2))
         row {
-            addView(button("Paste") { val clip = (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).primaryClip; input.setText(clip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString().orEmpty()) })
-            addView(button("Analyze") { vm.inputText = input.text.toString(); hideKeyboard(input); vm.analyze() })
-            addView(button("Select all") { vm.selectAll(true) })
-            addView(button("None") { vm.selectAll(false) })
+            addView(button("Joylash va tahlil qilish") {
+                val clip = (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
+                val text = clip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString().orEmpty().trim()
+                if (text.isBlank()) toast("Nusxalangan havola topilmadi")
+                else { input.setText(text); vm.inputText = text; hideKeyboard(input); vm.analyze() }
+            }.apply { isEnabled = !vm.busy.value })
+            addView(button("1 · Havolani tahlil qilish") {
+                vm.inputText = input.text.toString().trim(); hideKeyboard(input); vm.analyze()
+            }.apply { isEnabled = !vm.busy.value })
         }
-        outputControls()
+        if (vm.busy.value) {
+            paragraph("Havola tekshirilmoqda, biroz kuting…")
+            content.addView(ProgressBar(this).apply { isIndeterminate = true })
+        }
         val previews = vm.previews.value
-        if (previews.isEmpty()) paragraph("Enter one or several links, then Analyze. Playlist links are saved in Playlists.")
+        if (previews.isEmpty() && !vm.busy.value) paragraph("Havola qo‘yilgach tahlil boshlanadi. Natija chiqqanidan keyin MP3 yoki MP4 tanlab, yuklash tugmasini bosing.")
+        if (vm.playlistReady.value) content.addView(button("Pleylist elementlarini ko‘rish →") { playlistId = null; navigate(3) })
+        if (previews.isNotEmpty()) {
+            heading("2 · Format va sifatni tanlang")
+            outputControls()
+            paragraph("Kerakli videolarni belgilang. So‘ng pastdagi yuklash tugmasini bosing.")
+            if (previews.size > 1) row {
+                addView(button("Barchasini belgilash") { vm.selectAll(true) })
+                addView(button("Belgilashni olib tashlash") { vm.selectAll(false) })
+            }
+        }
         previews.forEachIndexed { index, preview ->
             val info = preview.info
             row {
@@ -122,9 +171,15 @@ class MainActivity : AppCompatActivity() {
                 addView(label("${info.title}\n${info.channel} · ${info.duration?.let { "${it / 60}m ${it % 60}s" } ?: "duration unknown"} · ${info.size?.let { "~${it / 1048576} MB" } ?: "size unknown"}", 15f), LinearLayout.LayoutParams(0, -2, 1f))
             }
         }
-        if (previews.isNotEmpty()) row {
-            addView(button("Download selected (${previews.count { it.selected }})") { vm.queueSelected() })
-            addView(button("Remove selected") { vm.removeSelected() })
+        if (previews.isNotEmpty()) {
+            val selected = previews.count { it.selected }
+            content.addView(button("3 · Tanlanganlarni yuklab olish ($selected)") {
+                if (!vm.analysisMatchesInput()) { toast("Havola o‘zgardi. Qayta tahlil qiling."); return@button }
+                vm.queueSelected()
+                navigate(1)
+            }.apply { isEnabled = selected > 0 && !vm.busy.value }, LinearLayout.LayoutParams(-1, 56.dp))
+            paragraph("Yuklash holati Navbat bo‘limida ko‘rinadi. Fayl tugagach Fayllar bo‘limida ochiladi.")
+            content.addView(button("Belgilanganlarni ro‘yxatdan olish") { vm.removeSelected() })
         }
     }
     private fun outputControls() {
@@ -148,7 +203,7 @@ class MainActivity : AppCompatActivity() {
             val eta = t.etaSeconds?.let { " · ETA ${it}s" }.orEmpty()
             block.addView(label("${"%.1f".format(t.progress)}% · ${t.downloadedBytes / 1048576} MB${t.totalBytes?.let { "/${it / 1048576} MB" }.orEmpty()}$speed$eta · ${t.stage.orEmpty()}", 13f))
             t.errorMessage?.let { block.addView(label(it, 14f).apply { setTextColor(0xffffb5ad.toInt()) }) }
-            val actions = LinearLayout(this)
+            val actions = LinearLayout(this).apply { orientation = if (portrait) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
             if (t.state in listOf("DOWNLOADING", "PROCESSING", "ANALYZING")) actions.addView(button("Pause") { vm.queueAction(t.id, "pause") })
             if (t.state in listOf("QUEUED", "PENDING", "DOWNLOADING", "PROCESSING", "ANALYZING")) actions.addView(button("Cancel") { vm.queueAction(t.id, "cancel") })
             if (t.state in listOf("FAILED", "PAUSED", "INTERRUPTED", "CANCELLED")) actions.addView(button("Resume / Retry") { vm.queueAction(t.id, "retry") })
@@ -230,18 +285,31 @@ class MainActivity : AppCompatActivity() {
         val stat = StatFs(cacheDir.absolutePath)
         paragraph("Free local space: ${stat.availableBytes / 1048576} MB · safety reserve: ${s.reserveBytes / 1048576} MB")
         row { addView(button("Check engine") { vm.checkHealth() }); addView(button("Clear cache") { vm.clearCache() }); addView(button("Export log") { exportLog.launch("cartube-diagnostics.txt") }) }
-        paragraph("CarTube Downloader 0.1.0 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
+        paragraph("CarTube Downloader 0.1.1 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
     }
     override fun onBackPressed() {
         if (page == 3 && playlistId != null) { playlistId = null; render() }
-        else if (page != 0) { page = 0; render() }
+        else if (page != 0) navigate(0)
         else super.onBackPressed()
     }
     private fun heading(t: String) { content.addView(label(t, 21f).apply { setTextColor(accent); setPadding(0, 4.dp, 0, 10.dp) }) }
     private fun paragraph(t: String) { content.addView(label(t, 14f).apply { setPadding(0, 6.dp, 0, 7.dp) }) }
     private fun label(t: String, size: Float) = TextView(this).apply { text = t; textSize = size; setTextColor(ink); gravity = Gravity.CENTER_VERTICAL }
     private fun button(t: String, f: () -> Unit) = Button(this).apply { text = t; textSize = 12f; minHeight = 48.dp; isAllCaps = false; setOnClickListener { f() } }
-    private fun row(build: LinearLayout.() -> Unit) { content.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; build() }) }
+    private fun row(build: LinearLayout.() -> Unit) {
+        content.addView(LinearLayout(this).apply {
+            orientation = if (portrait) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            build()
+            if (portrait) for (i in 0 until childCount) {
+                val child = getChildAt(i)
+                val params = child.layoutParams as LinearLayout.LayoutParams
+                params.width = LinearLayout.LayoutParams.MATCH_PARENT
+                params.weight = 0f
+                child.layoutParams = params
+            }
+        })
+    }
     private fun LinearLayout.enumSpinner(items: List<String>, chosen: Int, onChosen: (Int) -> Unit) {
         addView(Spinner(this@MainActivity).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, items); setSelection(chosen); onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}

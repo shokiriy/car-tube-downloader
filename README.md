@@ -32,6 +32,8 @@ To sign a release APK, copy `keystore.properties.example` to `keystore.propertie
 4. Connect Wi-Fi, open CarTube Downloader, tap **Settings → Check engine**, then analyze an authorized public link. The health check only confirms bundled tools initialize; actual extraction requires a network test on the device.
 5. Completed files appear in Music/CarTube or Movies/CarTube and the in-app library. Choose a folder in Settings for USB/SD output.
 
+On a phone, the interface opens in portrait and follows Android's Auto-rotate setting when the phone turns landscape. The fixed landscape head unit continues to display landscape. After copying a link, tap **Joylash va tahlil qilish** (Paste and analyze), choose MP3 or MP4 and quality, then tap **Tanlanganlarni yuklab olish**. The **Navbat** tab shows progress; **Fayllar** lists completed media. If you type or share a link into the app instead, tap **Havolani tahlil qilish** first. For a playlist, open **Pleylist** after analysis to choose items. Only download content you are authorized to save.
+
 Audio bitrate is an encoding request, not a guarantee of source quality. Paused items safely restart if stream URLs are stale. The app needs enough free local storage for downloaded streams plus conversion; by default it reserves 1 GiB in addition to an estimated threefold working-space allowance. It does not promise background operation through vendor process kills, power loss, or system restrictions.
 
 ## Source and licenses

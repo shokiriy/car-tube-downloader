@@ -3,6 +3,7 @@ package com.shokirjon.cartubedownloader.player
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -29,8 +30,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private var sourceUri = ""
     private var video = false
+    private var restoredPosition = -1L
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        restoredPosition = savedInstanceState?.getLong("position", -1L) ?: -1L
         sourceUri = intent.getStringExtra("uri").orEmpty()
         video = intent.getBooleanExtra("video", false)
         if (sourceUri.isBlank() || (video && !intent.getBooleanExtra("parkedConfirmed", false))) { finish(); return }
@@ -42,12 +45,21 @@ class PlayerActivity : AppCompatActivity() {
         root.addView(header)
         playerView = PlayerView(this).apply { resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = true }
         root.addView(playerView, LinearLayout.LayoutParams(-1, 0, 1f))
-        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-        fun action(label: String, click: () -> Unit) { controls.addView(Button(this).apply { text = label; minHeight = 52.dp; setOnClickListener { click() } }) }
-        action("Previous") { controller?.seekToPreviousMediaItem() }
-        action("Repeat") { controller?.let { it.repeatMode = if (it.repeatMode == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF } }
-        action("Shuffle") { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }
-        action("Next") { controller?.seekToNextMediaItem() }
+        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.VERTICAL }
+        val actions: List<Pair<String, () -> Unit>> = listOf(
+            "Previous" to { controller?.seekToPreviousMediaItem() },
+            "Repeat" to { controller?.let { it.repeatMode = if (it.repeatMode == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF } },
+            "Shuffle" to { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } },
+            "Next" to { controller?.seekToNextMediaItem() }
+        )
+        val columns = if (resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) 2 else 4
+        actions.chunked(columns).forEach { group ->
+            val line = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+            group.forEach { (name, click) -> line.addView(Button(this).apply {
+                text = name; minHeight = 52.dp; isAllCaps = false; setOnClickListener { click() }
+            }, LinearLayout.LayoutParams(0, 52.dp, 1f)) }
+            controls.addView(line, LinearLayout.LayoutParams(-1, -2))
+        }
         root.addView(controls)
         setContentView(root)
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
@@ -63,7 +75,8 @@ class PlayerActivity : AppCompatActivity() {
                             val index = completed.indexOfFirst { it.fileUri == sourceUri }.coerceAtLeast(0)
                             if (items.isEmpty()) mediaController.setMediaItem(MediaItem.fromUri(sourceUri)) else mediaController.setMediaItems(items, index, 0L)
                             val prefs = getSharedPreferences("playback", Context.MODE_PRIVATE)
-                            if (!video && prefs.getString("uri", null) == sourceUri) mediaController.seekTo(prefs.getLong("position", 0L))
+                            if (restoredPosition >= 0) mediaController.seekTo(restoredPosition)
+                            else if (!video && prefs.getString("uri", null) == sourceUri) mediaController.seekTo(prefs.getLong("position", 0L))
                             mediaController.prepare()
                             if (!video) mediaController.play()
                         }
@@ -75,6 +88,10 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         controller?.let { c -> getSharedPreferences("playback", Context.MODE_PRIVATE).edit().putString("uri", sourceUri).putLong("position", c.currentPosition).apply() }
         super.onStop()
+    }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("position", controller?.currentPosition ?: restoredPosition)
+        super.onSaveInstanceState(outState)
     }
     override fun onDestroy() {
         playerView.player = null
