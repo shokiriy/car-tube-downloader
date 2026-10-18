@@ -13,6 +13,8 @@
 
 Orientation and the paste flow are **BUILD-VERIFIED ONLY** until checked on an actual phone. Real MP3/MP4 downloads on the head unit are still **NOT TESTED**.
 
+The old local debug APK's signing certificate SHA-256 is `18033da2e0dfca495df55e5f059fb4c2a0c0b5522c94ac20efcaea529bed724e`; the 0.1.1 CI APK's is `92497bb459b65c09883234d9c8fa3411200ef11338586b9212437403154f82e4`. An installed 0.1.0 debug APK signed with the former certificate must be uninstalled before installing this 0.1.1 APK. This removes the in-app queue and library records, though completed files in shared MediaStore or a selected external folder remain. Future upgrades require a stable private release signing key.
+
 ## Environment and versions
 
 - Source branch: [`main`](https://github.com/shokiriy/car-tube-downloader/tree/main), pushed to `shokiriy/car-tube-downloader`
