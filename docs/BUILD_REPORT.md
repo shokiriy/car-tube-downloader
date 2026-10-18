@@ -2,7 +2,7 @@
 
 ## Environment and versions
 
-- Source branch: `main` (local repository; no remote configured)
+- Source branch: [`main`](https://github.com/shokiriy/car-tube-downloader/tree/main), pushed to `shokiriy/car-tube-downloader`
 - JDK 17.0.20; Gradle 8.13; Android Gradle Plugin 8.13.2; Kotlin 2.3.20
 - Android compile SDK 36, minimum SDK 30, target SDK 35
 - yt-dlp Android wrapper 0.18.1 (Python 3.12, QuickJS 2025-04-26); FFmpeg/FFprobe wrapper payload 0.18.1
@@ -24,7 +24,7 @@
 | Public authorized YouTube metadata on development host | VERIFIED | yt-dlp returned real Big Buck Bunny title, ID, and 30 formats; this is not an Android runtime test. |
 | MP3 conversion and MP4 download on head unit | NOT TESTED | No device connected; host media request returned an HTML “Site Unavailable” page (195 bytes), which FFmpeg rejected. No valid media bytes were obtained. |
 | Physical Android 11 / XY AUDIO B7.3 installation and playback | NOT TESTED | `adb devices` returned no devices. Device ABI is unknown. |
-| GitHub Actions | NOT TESTED | Workflow committed locally; no remote or CI run is configured. |
+| GitHub Actions | BUILD-VERIFIED ONLY | [CI run](https://github.com/shokiriy/car-tube-downloader/actions/runs/39104475436) passed `test assembleDebug` and uploaded two debug APKs with test reports. Physical device execution remains untested. |
 
 The application validates completed media with FFprobe and will not publish an empty/invalid MP3 or MP4 as a successful download. The build and source integration alone do not establish live YouTube download functionality. Native package license provenance and specific FFmpeg build options require review before public redistribution.
 
