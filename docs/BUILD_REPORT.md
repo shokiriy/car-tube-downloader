@@ -1,5 +1,18 @@
 # CarTube Downloader — build and validation report
 
+## Version 0.1.1 — portrait phone interface
+
+- Commit [`cdb6dade`](https://github.com/shokiriy/car-tube-downloader/commit/cdb6dade6896d01bdaaa2991ac5c15ed7946cebd) removes forced landscape from the downloader and player. Android follows device rotation; portrait stacks actions and puts navigation at the bottom. The Paste action analyzes the clipboard URL, then the screen guides format selection and queueing. `versionCode` is 2 so the APK updates 0.1.0.
+- [GitHub Actions run](https://github.com/shokiriy/car-tube-downloader/actions/runs/39157227607) passed `test assembleDebug` and uploaded both signed debug APKs. The debug unit test report has 8 tests and 0 failures; instrumentation and physical-device UI/download tests were not run.
+- APK integrity and the single packaged ABI in each APK were checked after downloading the CI artifact.
+
+| 0.1.1 signed debug APK | Bytes | ABI | SHA-256 |
+| --- | ---: | --- | --- |
+| `app-arm64-v8a-debug.apk` | 77,691,208 | `arm64-v8a` | `c41e123dd9ba1f089f542bdf06d93442d02e891c2f9cfa431e645b27400ff378` |
+| `app-armeabi-v7a-debug.apk` | 71,020,018 | `armeabi-v7a` | `bc5cd3a3fa47d95d8947a89f377c5efc65229a13548e4df9709c8625762604da` |
+
+Orientation and the paste flow are **BUILD-VERIFIED ONLY** until checked on an actual phone. Real MP3/MP4 downloads on the head unit are still **NOT TESTED**.
+
 ## Environment and versions
 
 - Source branch: [`main`](https://github.com/shokiriy/car-tube-downloader/tree/main), pushed to `shokiriy/car-tube-downloader`
@@ -37,7 +50,7 @@ The application validates completed media with FFprobe and will not publish an e
 5. Test a public playlist, cancellation, retry, process restart, Wi-Fi-only behavior, external SAF folder, and low storage.
 6. If extraction fails, export diagnostics from Settings; inspect the category and runtime output without treating a metadata-only result as a successful download.
 
-## APK files
+## Previous 0.1.0 APK files
 
 The signed debug APKs and unsigned release APKs are in `app/build/outputs/apk/`. The unsigned release outputs require a user keystore before installation. `apksigner verify` succeeds for debug and rejects the unsigned release as expected. Each APK contains only its named ARM ABI and bundles `libpython.so`, `libpython.zip.so`, `libqjs.so`, `libffmpeg.so`, `libffmpeg.zip.so`, `libffprobe.so`, yt-dlp and the EJS wheel.
 
