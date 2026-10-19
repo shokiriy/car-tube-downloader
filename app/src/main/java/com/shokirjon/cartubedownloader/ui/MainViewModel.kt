@@ -1,6 +1,7 @@
 package com.shokirjon.cartubedownloader.ui
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shokirjon.cartubedownloader.CarTubeApp
@@ -61,12 +62,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val found = ArrayList<Preview>()
                 var failed = invalid; var playlistCount = 0
                 for (target in urls) {
+                    val startedAt = SystemClock.elapsedRealtime()
                     try {
                         when (target) {
-                            is YouTubeTarget.Video -> found.add(Preview(app.extractor.extractInfo(target.canonicalUrl)))
+                            is YouTubeTarget.Video -> {
+                                found.add(Preview(app.extractor.extractInfo(target.canonicalUrl)))
+                                DiagnosticLog.record(app, "ANALYZE_TIMING ${target.id}", "elapsed=${SystemClock.elapsedRealtime() - startedAt}ms")
+                            }
                             is YouTubeTarget.Playlist -> {
                                 app.playlists.add(target.canonicalUrl)
                                 app.playlists.sync(target.id)
+                                DiagnosticLog.record(app, "PLAYLIST_TIMING ${target.id}", "elapsed=${SystemClock.elapsedRealtime() - startedAt}ms")
                                 playlistCount++
                                 _playlistReady.value = true
                             }

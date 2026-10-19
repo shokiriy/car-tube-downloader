@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.shokirjon.cartubedownloader.CarTubeApp
 import com.shokirjon.cartubedownloader.R
@@ -23,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 
 class DownloadService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,15 +91,19 @@ class DownloadService : Service() {
         } finally { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
     }
     private suspend fun processOne(task: DownloadTask) {
-        app.downloads.state(task.id, TaskState.ANALYZING, "Refreshing source metadata")
-        val info = app.extractor.extractInfo(task.canonicalUrl)
+        // yt-dlp resolves the current source again during download. The queue already stores
+        // metadata from analysis, so another full extraction here delays every item needlessly.
+        app.downloads.state(task.id, TaskState.ANALYZING, "Preparing download")
         if (app.downloads.get(task.id)?.state in listOf("PAUSED", "CANCELLED")) return
-        app.storage.ensureSpace(info.size ?: task.totalBytes)
-        app.downloads.state(task.id, TaskState.DOWNLOADING, "Downloading stream")
+        app.storage.ensureSpace(task.totalBytes)
+        app.downloads.state(task.id, TaskState.DOWNLOADING, "Connecting to media source")
         val kind = OutputKind.valueOf(task.kind)
         val quality = if (kind == OutputKind.MP3) AudioQuality.valueOf(task.quality).kbps else VideoQuality.valueOf(task.quality).height
         var lastUpdate = 0L
+        val startedAt = SystemClock.elapsedRealtime()
+        val firstProgressAt = AtomicLong(0L)
         val file = app.extractor.download(task.id, task.canonicalUrl, kind, quality, app.storage.workingDir(task.id)) { p ->
+            if (p.percent != null && p.downloaded != null) firstProgressAt.compareAndSet(0L, SystemClock.elapsedRealtime())
             val now = System.currentTimeMillis()
             if (now - lastUpdate >= 750L || p.stage != null) {
                 lastUpdate = now
@@ -108,10 +114,16 @@ class DownloadService : Service() {
                 }
             }
         }
+        val downloadedAt = SystemClock.elapsedRealtime()
+        DiagnosticLog.record(this, "DOWNLOAD_TIMING ${task.id}",
+            "engine=${downloadedAt - startedAt}ms; first_progress=${firstProgressAt.get().takeIf { it != 0L }?.minus(startedAt) ?: -1L}ms; output_bytes=${file.length()}")
         if (app.downloads.get(task.id)?.state in listOf("PAUSED", "CANCELLED")) return
         app.downloads.state(task.id, TaskState.PROCESSING, "Validating ${kind.name} file")
         app.validator.validate(file, kind)
+        val validatedAt = SystemClock.elapsedRealtime()
         val uri = app.storage.publish(file, kind, task.title)
+        DiagnosticLog.record(this, "SAVE_TIMING ${task.id}",
+            "validation=${validatedAt - downloadedAt}ms; publish=${SystemClock.elapsedRealtime() - validatedAt}ms")
         app.downloads.complete(task.id, uri.toString(), file.length())
     }
     private fun onWifi(): Boolean {
