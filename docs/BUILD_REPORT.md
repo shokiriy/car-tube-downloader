@@ -1,5 +1,20 @@
 # CarTube Downloader — build and validation report
 
+## Version 0.1.2 — media output and system-bar fix
+
+- Source commit [`e60ca0b`](https://github.com/shokiriy/car-tube-downloader/commit/e60ca0bbb3c51b4d6a88a4e8c988d6b3b0e986b6) accepts only yt-dlp's final `VIDEO_ID.mp4` or `VIDEO_ID.mp3`, instead of an arbitrary intermediate stream. Android MediaExtractor verifies container, H.264 video/AAC audio or MP3 audio, and readable samples before publication. The downloader screen now applies system status/navigation bar insets in both rotations. `versionCode=3` / `versionName=0.1.2`.
+- [GitHub Actions run 39218951196](https://github.com/shokiriy/car-tube-downloader/actions/runs/39218951196) passed `./gradlew test assembleDebug --stacktrace` and uploaded signed ARM64/ARMv7 debug APKs. Debug and release JVM reports each show 10 tests, 0 failures. The new output selection tests reject a video-only intermediate file.
+- A user screenshot from a phone shows real metadata and a thumbnail for their test link, plus a failed MP4 task at 46.4% with `The media file is not playable.` This establishes device metadata extraction, **not** a completed download. We could not obtain the device diagnostic export to distinguish FFprobe startup failure from a genuinely incomplete MP4. The code addresses both plausible paths; a device retry and diagnostic export are still required.
+
+| 0.1.2 signed debug APK | Bytes | ABI | SHA-256 |
+| --- | ---: | --- | --- |
+| `CarTube-Downloader-v0.1.2-arm64-v8a-debug.apk` | 77,694,348 | `arm64-v8a` | `122f2594c244dfd04fdff89c8c3a3712e7d4e407a941a39b9bb472c66742c7bf` |
+| `CarTube-Downloader-v0.1.2-armeabi-v7a-debug.apk` | 71,023,158 | `armeabi-v7a` | `5580fc3a15d01cbdb897549db34f1c179d9a9b1b580110bb58ec9f3dcf350cd5` |
+
+Both APKs contain their named native ABI only, including `libpython.so`, `libpython.zip.so`, `libqjs.so`, `libffmpeg.so`, `libffmpeg.zip.so`, and `libffprobe.so`. The physical device ABI remains unknown; install the matching variant. UI safe area, MP4 completion, MediaStore publishing, and playback are **BUILD-VERIFIED ONLY** for 0.1.2; no instrumented or physical device test was available in CI. Playlist selection remains implemented but not tested on the target device, and further device work follows the video fix.
+
+Local `./gradlew test assembleDebug` could not download Gradle because the development sandbox blocked `services.gradle.org`. The same command succeeded in GitHub Actions. Debug signing keys vary between CI environments; an installed older debug APK may require uninstall before the 0.1.2 APK can be installed, which clears app queue and playlist records. Completed shared media remains in storage.
+
 ## Version 0.1.1 — portrait phone interface
 
 - Commit [`cdb6dade`](https://github.com/shokiriy/car-tube-downloader/commit/cdb6dade6896d01bdaaa2991ac5c15ed7946cebd) removes forced landscape from the downloader and player. Android follows device rotation; portrait stacks actions and puts navigation at the bottom. The Paste action analyzes the clipboard URL, then the screen guides format selection and queueing. `versionCode` is 2 so the APK updates 0.1.0.
@@ -41,7 +56,7 @@ The old local debug APK's signing certificate SHA-256 is `18033da2e0dfca495df55e
 | Physical Android 11 / XY AUDIO B7.3 installation and playback | NOT TESTED | `adb devices` returned no devices. Device ABI is unknown. |
 | GitHub Actions | BUILD-VERIFIED ONLY | [CI run](https://github.com/shokiriy/car-tube-downloader/actions/runs/39104475436) passed `test assembleDebug` and uploaded two debug APKs with test reports. Physical device execution remains untested. |
 
-The application validates completed media with FFprobe and will not publish an empty/invalid MP3 or MP4 as a successful download. The build and source integration alone do not establish live YouTube download functionality. Native package license provenance and specific FFmpeg build options require review before public redistribution.
+Version 0.1.2 validates completed media with Android MediaExtractor and will not publish an empty/invalid MP3 or MP4 as a successful download. The build and source integration alone do not establish live YouTube download functionality. Native package license provenance and specific FFmpeg build options require review before public redistribution.
 
 ## Device acceptance steps
 
