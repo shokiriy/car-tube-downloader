@@ -68,6 +68,7 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
         runtime.initialize()
         cancelled.remove(taskId)
         workingDirectory.mkdirs()
+        val recent = ArrayDeque<String>()
         try {
             val request = YoutubeDLRequest(url).addOption("--ignore-config").addOption("--no-playlist")
                 .addOption("--no-continue").addOption("--newline")
@@ -79,8 +80,9 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
             } else {
                 request.addOption("-f", FormatSelector.mp4(quality)).addOption("--merge-output-format", "mp4")
             }
-            val recent = ArrayDeque<String>()
-            val response = YoutubeDL.execute(request, taskId, true) { _, _, line ->
+            // The Android wrapper reports failures from stderr. Redirecting it into stdout
+            // discards that diagnostic when execute throws, leaving an unhelpful empty error.
+            val response = YoutubeDL.execute(request, taskId, false) { _, _, line ->
                 if (recent.size >= 12) recent.removeFirst()
                 recent.addLast(line.take(400))
                 onProgress(ProgressParser.parse(line))
@@ -96,7 +98,9 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
                     "yt-dlp exit=${response.exitCode}; files=${workingDirectory.listFiles()?.joinToString { "${it.name}:${it.length()}" }}; output=${recent.joinToString(" | ")}".take(2500))
         } catch (e: Exception) {
             if (cancelled.contains(taskId)) throw EngineException(ErrorCategory.CANCELLED, "Download cancelled.")
-            throw classify(e)
+            val detail = if (e.message.isNullOrBlank() && recent.isNotEmpty())
+                Exception(recent.joinToString(" | ").takeLast(1500), e) else e
+            throw classify(detail)
         } finally { cancelled.remove(taskId) }
     } }
 

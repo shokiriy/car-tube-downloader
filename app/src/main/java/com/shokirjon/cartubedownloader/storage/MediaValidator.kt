@@ -6,7 +6,6 @@ import com.shokirjon.cartubedownloader.core.EngineException
 import com.shokirjon.cartubedownloader.core.ErrorCategory
 import com.shokirjon.cartubedownloader.core.OutputKind
 import java.io.File
-import java.nio.ByteBuffer
 
 /** Verify the finished file with Android's own demuxer before making it visible in MediaStore. */
 class MediaValidator {
@@ -36,10 +35,12 @@ class MediaValidator {
                 val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
                 tracks.add(mime)
                 if (mime == "audio/mpeg" || mime == "audio/mp4a-latm" || mime == "video/avc") {
-                    stage = "reading sample $index ($mime)"
+                    stage = "selecting track $index ($mime)"
                     extractor.selectTrack(index)
-                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                    if (extractor.readSampleData(ByteBuffer.allocate(4096), 0) <= 0)
+                    // Sample payloads can exceed 4 KiB, especially H.264 keyframes. We only
+                    // need to confirm a sample exists; no payload allocation or seek is needed.
+                    stage = "inspecting sample $index ($mime)"
+                    if (extractor.sampleSize <= 0L)
                         throw EngineException(ErrorCategory.CONVERSION, "The output contains an empty media track.", "track=$mime, bytes=${file.length()}")
                     extractor.unselectTrack(index)
                 }

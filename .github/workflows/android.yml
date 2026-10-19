@@ -18,7 +18,7 @@ jobs:
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
           "$SDKMANAGER" --install 'platforms;android-36' 'build-tools;35.0.0'
-      - run: ./gradlew test assembleDebug --stacktrace
+      - run: ./gradlew test assembleDebug assembleDebugAndroidTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -295,7 +295,7 @@ class MainActivity : AppCompatActivity() {
         val stat = StatFs(cacheDir.absolutePath)
         paragraph("Free local space: ${stat.availableBytes / 1048576} MB · safety reserve: ${s.reserveBytes / 1048576} MB")
         row { addView(button("Check engine") { vm.checkHealth() }); addView(button("Clear cache") { vm.clearCache() }); addView(button("Export log") { exportLog.launch("cartube-diagnostics.txt") }) }
-        paragraph("CarTube Downloader 0.1.3 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
+        paragraph("CarTube Downloader 0.1.4 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
     }
     override fun onBackPressed() {
         if (page == 3 && playlistId != null) { playlistId = null; render() }
