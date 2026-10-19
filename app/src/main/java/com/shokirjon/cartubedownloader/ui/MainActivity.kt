@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity() {
     private val portrait get() = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
     private val images by lazy { ThumbnailLoader(this) }
     private val previewPlayer by lazy { YouTubePreview(this) { showEmbedFallback() } }
+    private val localPreview by lazy { LocalVideoPreview(this) }
     private var previewDialog: AlertDialog? = null
     private var activePreviewId: String? = null
     private var unavailablePreviewId: String? = null
@@ -199,7 +200,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         previewDialog?.dismiss()
-        if (::root.isInitialized) { previewPlayer.close(); activePreviewId = null }
+        if (::root.isInitialized) { closePreview(); activePreviewId = null }
         parkedForPreview = false
     }
 
@@ -262,7 +263,7 @@ class MainActivity : AppCompatActivity() {
             rememberPosition()
             root.removeView(playlistShell)
             root.addView(scroll, 3, LinearLayout.LayoutParams(-1, 0, 1f))
-            previewPlayer.close(); activePreviewId = null
+            closePreview(); activePreviewId = null
         }
         val previousY = if (resetScroll) 0 else scroll.scrollY
         playlistGeneration++
@@ -463,7 +464,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildPlaylistWorkspace() {
         rememberPosition()
         previewDialog?.dismiss()
-        previewPlayer.close(); activePreviewId = null
+        closePreview(); activePreviewId = null
         val shell = playlistShell ?: return
         shell.removeAllViews()
         shell.setPadding(14.dp, 6.dp, 14.dp, 2.dp)
@@ -521,7 +522,7 @@ class MainActivity : AppCompatActivity() {
                     if (state.items.isNotEmpty() && firstVisibleItem + visibleItemCount >= state.items.size - 6) loadNextPage(id)
                     val active = activePreviewId
                     if (active != null && visibleItemCount > 0 && previewDialog?.isShowing != true && state.items.indexOfFirst { it.videoId == active }.let { it < firstVisibleItem || it >= firstVisibleItem + visibleItemCount }) {
-                        previewPlayer.close(); activePreviewId = null
+                        closePreview(); activePreviewId = null
                     }
                 }
             })
@@ -548,7 +549,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private inner class PlaylistRow {
-        val root = column().apply { setPadding(0, 5.dp, 0, 5.dp); minHeight = 78.dp }
+        val root = column().apply { setPadding(0, 5.dp, 0, 5.dp); minimumHeight = 78.dp }
         private val line = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
         private val check = CheckBox(this@MainActivity).apply { buttonTintList = ColorStateList.valueOf(accent); contentDescription = "Videoni tanlash" }
         private val image = ImageView(this@MainActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true; background = shape(raised, 7) }
@@ -616,7 +617,7 @@ class MainActivity : AppCompatActivity() {
                 previewBox.visibility = View.VISIBLE
                 previewBox.layoutParams = (previewBox.layoutParams as LinearLayout.LayoutParams).apply { height = minOf((resources.displayMetrics.widthPixels * 0.52f).toInt(), 290.dp).coerceAtLeast(200.dp) }
                 if (unavailablePreviewId == entry.videoId) embedFallback(previewBox, entry.videoId)
-                else previewPlayer.attach(previewBox, entry.videoId)
+                else attachPreview(previewBox, entry.videoId)
             } else {
                 if (previewBox.childCount > 0) previewBox.removeAllViews()
                 previewBox.visibility = View.GONE
@@ -731,15 +732,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun openInline(id: String) = confirmPreview {
         if (activePreviewId == id) {
-            activePreviewId = null; previewPlayer.close()
+            activePreviewId = null; closePreview()
         } else {
-            previewPlayer.close(); unavailablePreviewId = null; activePreviewId = id
+            closePreview(); unavailablePreviewId = null; activePreviewId = id
         }
         playlistAdapter?.notifyDataSetChanged()
     }
 
     private fun openLarge(id: String, title: String) = confirmPreview {
-        if (activePreviewId != id) { previewPlayer.close(); unavailablePreviewId = null; activePreviewId = id }
+        if (activePreviewId != id) { closePreview(); unavailablePreviewId = null; activePreviewId = id }
         previewDialog?.dismiss()
         val body = column().apply { setPadding(10.dp, 10.dp, 10.dp, 10.dp); background = shape(bg, 12) }
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -759,14 +760,27 @@ class MainActivity : AppCompatActivity() {
             val at = state?.items?.indexOfFirst { it.videoId == id } ?: -1
             if (list != null && at in list.firstVisiblePosition until (list.firstVisiblePosition + list.childCount)) {
                 playlistAdapter?.notifyDataSetChanged()
-            } else { previewPlayer.close(); activePreviewId = null }
+            } else { closePreview(); activePreviewId = null }
         }
         dialog.show()
         previewDialog = dialog
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.setLayout(width + 20.dp, WindowManager.LayoutParams.WRAP_CONTENT)
-        if (unavailablePreviewId == id) embedFallback(video, id) else previewPlayer.attach(video, id)
+        if (unavailablePreviewId == id) embedFallback(video, id) else attachPreview(video, id)
     }
+
+    private fun attachPreview(parent: FrameLayout, id: String) {
+        val local = taskByVideo[id]?.takeIf { it.state == "COMPLETED" && it.kind == "MP4" }?.fileUri
+        if (local != null) {
+            previewPlayer.close()
+            localPreview.attach(parent, Uri.parse(local))
+        } else {
+            localPreview.close()
+            previewPlayer.attach(parent, id)
+        }
+    }
+
+    private fun closePreview() { previewPlayer.close(); localPreview.close() }
 
     private fun showEmbedFallback() {
         val id = activePreviewId ?: return
@@ -1095,7 +1109,7 @@ class MainActivity : AppCompatActivity() {
     @Deprecated("Compatibility with Android 11 system back dispatch")
     override fun onBackPressed() {
         if (previewDialog?.isShowing == true) previewDialog?.dismiss()
-        else if (activePreviewId != null) { previewPlayer.close(); activePreviewId = null; playlistAdapter?.notifyDataSetChanged() }
+        else if (activePreviewId != null) { closePreview(); activePreviewId = null; playlistAdapter?.notifyDataSetChanged() }
         else if (sheet?.isShowing == true) sheet?.dismiss()
         else if (mode == 1) { mode = 0; renderTabs(); renderWorkspace(resetScroll = true) }
         else super.onBackPressed()
