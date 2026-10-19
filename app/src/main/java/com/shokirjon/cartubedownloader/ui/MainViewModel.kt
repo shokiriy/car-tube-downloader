@@ -119,14 +119,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "pause" -> DownloadService.pause(app, id)
             "cancel" -> DownloadService.cancel(app, id)
             "retry" -> { app.storage.cleanup(id); app.downloads.retry(id); DownloadService.start(app) }
-            "remove" -> { app.storage.cleanup(id); app.downloads.remove(id) }
+            "remove" -> {
+                val task = app.downloads.get(id)
+                app.storage.cleanup(id); app.downloads.remove(id)
+                if (task?.playlistId != null && task.videoId != null) {
+                    app.dao.unmarkQueued(task.playlistId, task.videoId)
+                    _playlistRevision.value++
+                }
+            }
             "up" -> app.downloads.move(id, -1)
             "down" -> app.downloads.move(id, 1)
         }
     }
     fun cancelRemaining() = viewModelScope.launch(Dispatchers.IO) { app.downloads.pending().forEach { app.downloads.state(it.id, TaskState.CANCELLED) } }
-    fun clearCompleted() = viewModelScope.launch(Dispatchers.IO) { app.downloads.clearCompleted() }
-    fun clearFailed() = viewModelScope.launch(Dispatchers.IO) { app.downloads.clearFailed() }
+    fun clearCompleted() = viewModelScope.launch(Dispatchers.IO) {
+        val removed = app.dao.allTasks().filter { it.state == "COMPLETED" }
+        app.downloads.clearCompleted()
+        removed.forEach { task -> if (task.playlistId != null && task.videoId != null) app.dao.unmarkQueued(task.playlistId, task.videoId) }
+        _playlistRevision.value++
+    }
+    fun clearFailed() = viewModelScope.launch(Dispatchers.IO) {
+        val removed = app.dao.allTasks().filter { it.state == "FAILED" }
+        app.downloads.clearFailed()
+        removed.forEach { task -> if (task.playlistId != null && task.videoId != null) app.dao.unmarkQueued(task.playlistId, task.videoId) }
+        _playlistRevision.value++
+    }
     fun addPlaylist(url: String, interval: String, wifi: Boolean, autoAdd: Boolean, kind: OutputKind, quality: String) = viewModelScope.launch(Dispatchers.IO) {
         _busy.value = true
         try {

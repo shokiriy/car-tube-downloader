@@ -311,10 +311,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun playlistInput(parent: LinearLayout) {
         if (playlistId != null && portrait && !showPlaylistInput) {
-            val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-            header.addView(button("Boshqa pleylist", Style.QUIET) { showPlaylistInput = true; renderPlaylistInputOnly() }, LinearLayout.LayoutParams(0, 42.dp, 1f))
-            header.addView(button("↻", Style.QUIET) { playlistId?.let { vm.syncPlaylist(it) } }.apply { contentDescription = "Pleylistni tekshirish" }, LinearLayout.LayoutParams(44.dp, 42.dp))
-            parent.addView(header)
+            parent.addView(button("Boshqa pleylist", Style.QUIET) { showPlaylistInput = true; renderPlaylistInputOnly() }, spaced(bottom = 2))
             qualityControls(parent)
             return
         }
@@ -488,8 +485,19 @@ class MainActivity : AppCompatActivity() {
     private fun playlistResults(parent: LinearLayout) {
         val id = playlistId
         val playlist = vm.playlists.value.firstOrNull { it.id == id }
+        val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         playlistHeading = text(playlist?.title ?: "Pleylist", 16f, ink, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        parent.addView(playlistHeading, spaced(bottom = 2))
+        headingRow.addView(playlistHeading, LinearLayout.LayoutParams(0, -2, 1f))
+        if (id != null) {
+            headingRow.addView(button("↻", Style.QUIET) { vm.syncPlaylist(id) }.apply { contentDescription = "Pleylistni tekshirish" }, LinearLayout.LayoutParams(40.dp, 40.dp))
+            headingRow.addView(button("×", Style.QUIET) {
+                AlertDialog.Builder(this).setMessage("${playlist?.title ?: "Pleylist"} ro‘yxatdan o‘chirilsinmi?")
+                    .setPositiveButton("O‘chirish") { _, _ ->
+                        vm.removePlaylist(id); playlistId = null; renderWorkspace(resetScroll = true)
+                    }.setNegativeButton("Bekor", null).show()
+            }.apply { contentDescription = "Pleylistni o‘chirish" }, LinearLayout.LayoutParams(40.dp, 40.dp))
+        }
+        parent.addView(headingRow, spaced(bottom = 2))
         playlistMeta = text("", 11f, muted)
         parent.addView(playlistMeta, spaced(bottom = 5))
         if (id == null || playlist == null) {
@@ -615,7 +623,8 @@ class MainActivity : AppCompatActivity() {
             showStatus(entry)
             if (activePreviewId == entry.videoId && previewDialog?.isShowing != true) {
                 previewBox.visibility = View.VISIBLE
-                previewBox.layoutParams = (previewBox.layoutParams as LinearLayout.LayoutParams).apply { height = minOf((resources.displayMetrics.widthPixels * 0.52f).toInt(), 290.dp).coerceAtLeast(200.dp) }
+                val availableWidth = ((playlistList?.width ?: resources.displayMetrics.widthPixels) - 45.dp).coerceAtLeast(200)
+                previewBox.layoutParams = (previewBox.layoutParams as LinearLayout.LayoutParams).apply { height = (availableWidth * 9f / 16f).toInt().coerceAtLeast(200) }
                 if (unavailablePreviewId == entry.videoId) embedFallback(previewBox, entry.videoId)
                 else attachPreview(previewBox, entry.videoId)
             } else {
@@ -652,8 +661,13 @@ class MainActivity : AppCompatActivity() {
                 val top = list.getChildAt(0)?.top ?: 0
                 state.append(items)
                 playlistAdapter?.notifyDataSetChanged()
-                if (offset == 0) positions[id]?.let { list.setSelectionFromTop(it.first, it.second) }
-                else if (first > 0) list.setSelectionFromTop(first, top)
+                val restore = positions[id]
+                if (restore != null && restore.first < state.items.size) {
+                    list.setSelectionFromTop(restore.first, restore.second)
+                    positions.remove(id)
+                } else if (restore != null && !state.exhausted) {
+                    list.post { loadNextPage(id) }
+                } else if (first > 0) list.setSelectionFromTop(first, top)
                 showPagingFooter(state)
             } catch (_: Exception) {
                 if (paging === state) { state.fail(); showPagingFooter(state) }
@@ -701,6 +715,11 @@ class MainActivity : AppCompatActivity() {
         val playlist = vm.playlists.value.firstOrNull { it.id == id } ?: return
         playlistHeading?.text = playlist.title
         playlistMeta?.text = "${playlist.totalCount ?: playlist.knownCount} video · ${playlist.knownCount} topildi · ${playlist.newCount} yangi"
+        val state = paging
+        if (state?.playlistId == id && state.exhausted && playlist.knownCount > state.items.size) {
+            state.allowMore()
+            playlistList?.post { if (paging === state) loadNextPage(id) }
+        }
         lifecycleScope.launch {
             val count = withContext(Dispatchers.IO) { vm.playlistSelectedCount(id) }
             if (playlistId != id) return@launch
@@ -711,8 +730,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updatePlaylistStatuses(tasks: List<DownloadTask>) {
-        val id = playlistId
-        taskByVideo = tasks.asSequence().filter { it.videoId != null && (it.playlistId == id || it.playlistId == null) }
+        taskByVideo = tasks.asSequence().filter { it.videoId != null }
             .sortedBy { it.updatedAt }.associateBy { it.videoId!! }
         val list = playlistList ?: return
         val state = paging ?: return

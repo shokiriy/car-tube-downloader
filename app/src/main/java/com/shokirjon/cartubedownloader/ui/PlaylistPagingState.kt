@@ -29,6 +29,8 @@ internal class PlaylistPagingState(val playlistId: String, val pageSize: Int = 2
 
     fun fail() { loading = false; failed = true }
 
+    fun allowMore() { exhausted = false }
+
     fun update(videoId: String, transform: (PlaylistEntry) -> PlaylistEntry): Int {
         val index = items.indexOfFirst { it.videoId == videoId }
         if (index >= 0) items[index] = transform(items[index])
