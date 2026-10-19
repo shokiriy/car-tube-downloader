@@ -38,6 +38,7 @@ class CoreTest {
             MediaFormat("d", "mp4", 360, "hev1", "mp4a", 12))
         assertEquals(listOf("a"), FormatSelector.compatible(formats, 480).map { it.id })
         assertTrue(FormatSelector.mp4(480).contains("[height<=480]"))
+        assertTrue(FormatSelector.mp4(480).startsWith("best[ext=mp4][vcodec^=avc1][acodec^=mp4a]"))
     }
     @Test fun unsupportedAbiAndStorageReserve() {
         assertFalse(RuntimeChecks.supportsAny(arrayOf("x86", "x86_64")))

@@ -27,13 +27,16 @@ class MediaValidator {
             catch (e: Exception) { throw EngineException(ErrorCategory.FILE_WRITE, "Could not read the output file.", e.toString(), e) }
         }
         val extractor = MediaExtractor()
+        var stage = "opening file"
         try {
             extractor.setDataSource(file.absolutePath)
             val tracks = mutableListOf<String>()
             for (index in 0 until extractor.trackCount) {
+                stage = "reading track $index"
                 val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
                 tracks.add(mime)
                 if (mime == "audio/mpeg" || mime == "audio/mp4a-latm" || mime == "video/avc") {
+                    stage = "reading sample $index ($mime)"
                     extractor.selectTrack(index)
                     extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
                     if (extractor.readSampleData(ByteBuffer.allocate(4096), 0) <= 0)
@@ -47,8 +50,12 @@ class MediaValidator {
                 if (kind == OutputKind.MP3) "The output is not a playable MP3."
                 else "The MP4 requires H.264 video and AAC audio.", "tracks=$tracks, bytes=${file.length()}")
         } catch (e: EngineException) { throw e }
-        catch (e: Exception) { throw EngineException(ErrorCategory.CONVERSION,
-            "Android could not open the finished media file.", "${e.javaClass.simpleName}: ${e.message}; bytes=${file.length()}", e) }
+        catch (e: Exception) {
+            val structure = if (kind == OutputKind.MP4) runCatching { Mp4Atoms.describe(file) }.getOrDefault("atom inspection failed") else "mp3"
+            throw EngineException(ErrorCategory.CONVERSION,
+                "Android could not open the finished media file.",
+                "stage=$stage; ${e.javaClass.simpleName}: ${e.message}; bytes=${file.length()}; $structure", e)
+        }
         finally { extractor.release() }
     }
 }

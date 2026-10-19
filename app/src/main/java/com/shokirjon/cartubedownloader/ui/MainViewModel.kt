@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shokirjon.cartubedownloader.CarTubeApp
 import com.shokirjon.cartubedownloader.core.*
+import com.shokirjon.cartubedownloader.diagnostics.DiagnosticLog
 import com.shokirjon.cartubedownloader.download.DownloadService
 import com.shokirjon.cartubedownloader.download.EnqueueResult
 import com.shokirjon.cartubedownloader.playlist.PlaylistScheduler
@@ -72,7 +73,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         _previews.value = found.toList()
                         _message.value = "${found.size} ta video topildi, $playlistCount ta pleylist yuklandi, $failed ta xato. Formatni tanlab yuklang."
-                    } catch (e: Exception) { failed++; _message.value = e.message ?: "Havolani tahlil qilib bo‘lmadi." }
+                    } catch (e: Exception) {
+                        failed++
+                        DiagnosticLog.record(app, "ANALYZE_ERROR", (e as? EngineException)?.diagnostic ?: e.toString())
+                        _message.value = e.message ?: "Havolani tahlil qilib bo‘lmadi."
+                    }
                 }
                 analyzedText = sourceText
             } finally { _busy.value = false }
@@ -119,13 +124,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             PlaylistScheduler.schedule(app)
             _message.value = "Playlist saved: $count items discovered."
             if (autoAdd) DownloadService.start(app)
-        } catch (e: Exception) { _message.value = e.message ?: "Playlist check failed." }
+        } catch (e: Exception) {
+            DiagnosticLog.record(app, "PLAYLIST_ADD_ERROR", (e as? EngineException)?.diagnostic ?: e.toString())
+            _message.value = e.message ?: "Playlist check failed."
+        }
         finally { _busy.value = false }
     }
     fun syncPlaylist(id: String) = viewModelScope.launch(Dispatchers.IO) {
         _busy.value = true
         try { _message.value = "${app.playlists.sync(id)} new items found."; if (app.dao.playlist(id)?.autoAdd == true) DownloadService.start(app) }
-        catch (e: Exception) { _message.value = e.message ?: "Playlist check failed." }
+        catch (e: Exception) {
+            DiagnosticLog.record(app, "PLAYLIST_CHECK_ERROR", (e as? EngineException)?.diagnostic ?: e.toString())
+            _message.value = e.message ?: "Playlist check failed."
+        }
         finally { _busy.value = false }
     }
     fun queuePlaylist(id: String) = viewModelScope.launch(Dispatchers.IO) {

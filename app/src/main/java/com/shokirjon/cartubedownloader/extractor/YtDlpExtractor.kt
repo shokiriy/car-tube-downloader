@@ -3,6 +3,7 @@ package com.shokirjon.cartubedownloader.extractor
 import android.content.Context
 import android.os.Build
 import com.shokirjon.cartubedownloader.core.*
+import com.shokirjon.cartubedownloader.diagnostics.DiagnosticLog
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
@@ -13,7 +14,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 class YtDlpExtractor(context: Context) : MediaExtractor {
-    private val runtime = YtDlpRuntime(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val runtime = YtDlpRuntime(appContext)
     private val mutex = Mutex()
     private val cancelled = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
@@ -36,10 +38,13 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
     override suspend fun extractPlaylist(url: String, offset: Int, limit: Int): PlaylistPage = mutex.withLock { withContext(Dispatchers.IO) {
         runtime.initialize()
         require(offset >= 0 && limit in 1..50)
+        val target = YouTubeUrlParser.parse(url) as? YouTubeTarget.Playlist
+            ?: throw EngineException(ErrorCategory.INVALID_URL, "Enter a public playlist URL.")
         try {
-            val request = YoutubeDLRequest(url).addOption("--ignore-config").addOption("--flat-playlist")
+            val request = YoutubeDLRequest(PlaylistSource.forExtractor(target)).addOption("--ignore-config").addOption("--flat-playlist")
+                .addOption("--yes-playlist")
                 .addOption("--dump-single-json").addOption("--playlist-items", "${offset + 1}:${offset + limit}")
-                .addOption("--skip-download").addOption("--no-warnings")
+                .addOption("--skip-download")
             val json = JSONObject(YoutubeDL.execute(request).out.trim())
             val array = json.optJSONArray("entries")
             val items = if (array == null) emptyList() else (0 until array.length()).mapNotNull { index ->
@@ -48,8 +53,15 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
                 val title = entry.textOrNull("title")?.takeUnless { it.equals("[Private video]", true) || it.equals("[Deleted video]", true) } ?: return@mapNotNull null
                 PlaylistItem(id, title, "https://www.youtube.com/watch?v=$id", entry.textOrNull("thumbnail"))
             }
-            PlaylistPage(json.getString("id"), json.optString("title", "Playlist"), json.optInt("playlist_count").takeIf { it > 0 }, items)
-        } catch (e: Exception) { throw classify(e) }
+            PlaylistPage(target.id, json.optString("title", "Playlist"), json.optInt("playlist_count").takeIf { it > 0 }, items)
+        } catch (e: Exception) {
+            val cause = classify(e)
+            DiagnosticLog.record(appContext, "PLAYLIST ${target.id}", cause.diagnostic ?: e.message)
+            if (target.id.startsWith("RD") && cause.category == ErrorCategory.EXTRACTION)
+                throw EngineException(ErrorCategory.UNAVAILABLE,
+                    "This YouTube Mix could not be loaded. Try its full watch link or a regular public playlist.", cause.diagnostic, cause)
+            throw cause
+        }
     } }
 
     override suspend fun download(taskId: String, url: String, kind: OutputKind, quality: Int, workingDirectory: File, onProgress: (TransferProgress) -> Unit): File = mutex.withLock { withContext(Dispatchers.IO) {
@@ -58,7 +70,7 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
         workingDirectory.mkdirs()
         try {
             val request = YoutubeDLRequest(url).addOption("--ignore-config").addOption("--no-playlist")
-                .addOption("--no-continue").addOption("--newline").addOption("--no-warnings")
+                .addOption("--no-continue").addOption("--newline")
                 .addOption("-o", File(workingDirectory, "%(id)s.%(ext)s").absolutePath)
             if (kind == OutputKind.MP3) {
                 request.addOption("-f", "bestaudio[ext=m4a]/bestaudio").addOption("-x")
@@ -75,6 +87,7 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
             }
             if (cancelled.contains(taskId)) throw EngineException(ErrorCategory.CANCELLED, "Download cancelled.")
             if (response.exitCode != 0) throw EngineException(ErrorCategory.EXTRACTION, "Media transfer did not finish.", response.err.take(2000))
+            DiagnosticLog.record(appContext, "YTDLP_RETURNED $taskId", recent.joinToString(" | ").takeLast(650))
             val extension = if (kind == OutputKind.MP3) "mp3" else "mp4"
             val videoId = (YouTubeUrlParser.parse(url) as? YouTubeTarget.Video)?.id
                 ?: throw EngineException(ErrorCategory.EXTRACTION, "Video ID is unavailable.")
