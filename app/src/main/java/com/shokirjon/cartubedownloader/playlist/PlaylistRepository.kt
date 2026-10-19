@@ -99,8 +99,8 @@ class PlaylistRepository(
             if (dao.insertItem(row) != -1L) added++
         }
         dao.upsertPlaylist(saved.copy(title = batch.title, knownCount = dao.playlistCount(saved.id),
-            newCount = saved.newCount + added, totalCount = batch.count ?: (if (batch.items.isEmpty()) offset else saved.totalCount),
-            remoteOffset = if (batch.items.isEmpty()) (batch.count ?: offset) else offset + 50))
+            newCount = saved.newCount + added, totalCount = batch.count ?: saved.totalCount ?: (if (batch.items.isEmpty()) offset else null),
+            remoteOffset = if (batch.items.isEmpty() && batch.count == null) offset else offset + 50))
     }
 
     suspend fun queueSelected(id: String, kind: OutputKind, quality: String): Pair<Int, Int> {
