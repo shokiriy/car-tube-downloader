@@ -208,10 +208,10 @@ class MainActivity : AppCompatActivity() {
             setPadding(3.dp, 3.dp, 3.dp, 3.dp)
             background = shape(surface, radius = 21)
         }
-        listOf("Bitta / bir nechta", "Pleylist").forEachIndexed { index, title ->
+        listOf("Video", "Pleylist").forEachIndexed { index, title ->
             segment.addView(button(title, if (mode == index) Style.SELECTED else Style.GHOST) {
                 if (mode != index) { mode = index; renderTabs(); renderWorkspace(resetScroll = true) }
-            }.apply { textSize = 13f }, LinearLayout.LayoutParams(if (portrait) 142.dp else 170.dp, 40.dp))
+            }.apply { textSize = 13f }, LinearLayout.LayoutParams(if (portrait) 126.dp else 146.dp, 40.dp))
         }
         modeTabs.addView(segment)
     }
@@ -255,7 +255,7 @@ class MainActivity : AppCompatActivity() {
             if (pasted.isBlank()) toast("Nusxalangan havola yo‘q") else {
                 entry.setText(pasted); vm.inputText = pasted; hideKeyboard(entry); vm.analyze()
             }
-        }), LinearLayout.LayoutParams(0, 44.dp, 1f))
+        }, LinearLayout.LayoutParams(0, 44.dp, 1f))
         actions.addView(button("Tozalash", Style.QUIET) { entry.setText(""); vm.inputText = "" }, LinearLayout.LayoutParams(0, 44.dp, 1f))
         actions.addView(button("Tahlil", Style.PRIMARY) {
             vm.inputText = entry.text.toString().trim(); hideKeyboard(entry); vm.analyze()
@@ -274,7 +274,7 @@ class MainActivity : AppCompatActivity() {
             val clip = (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
             val pasted = clip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty().trim()
             if (pasted.isBlank()) toast("Nusxalangan havola yo‘q") else { entry.setText(pasted); playlistUrl = pasted }
-        }), LinearLayout.LayoutParams(0, 44.dp, 1f))
+        }, LinearLayout.LayoutParams(0, 44.dp, 1f))
         actions.addView(button("Yuklash", Style.PRIMARY) {
             playlistUrl = entry.text.toString().trim(); hideKeyboard(entry)
             vm.addPlaylist(playlistUrl, listOf("MANUAL", "DAILY", "WEEKLY")[playlistInterval],
@@ -296,11 +296,15 @@ class MainActivity : AppCompatActivity() {
         qualityControls(parent)
         if (vm.playlists.value.isNotEmpty()) {
             parent.addView(text("Saqlangan pleylistlar", 14f, ink, true), spaced(top = 18, bottom = 7))
-            vm.playlists.value.take(10).forEach { p ->
+            vm.playlists.value.forEach { p ->
                 val item = column().apply { setPadding(12.dp, 10.dp, 12.dp, 10.dp); background = ripple(surface, 13) }
                 item.addView(text(p.title, 14f, ink, true).apply { maxLines = 1 })
                 item.addView(text("${p.knownCount} ta video · ${p.newCount} yangi · ${p.interval.lowercase()}", 11f, muted))
-                item.setOnClickListener { playlistId = p.id; playlistUrl = p.url; playlistOffset = 0; renderWorkspace(resetScroll = true) }
+                item.setOnClickListener {
+                    playlistId = p.id; playlistUrl = p.url; playlistOffset = 0
+                    playlistInterval = listOf("MANUAL", "DAILY", "WEEKLY").indexOf(p.interval).coerceAtLeast(0)
+                    renderWorkspace(resetScroll = true)
+                }
                 parent.addView(item, spaced(bottom = 7))
             }
         }
@@ -564,7 +568,11 @@ class MainActivity : AppCompatActivity() {
         if (tasks.size > (queuePage + 1) * 20) paging.addView(button("Keyingi →", Style.QUIET) { queuePage++; renderQueueSheet() }, LinearLayout.LayoutParams(0, 42.dp, 1f))
         body.addView(paging)
         val clear = LinearLayout(this)
-        clear.addView(button("Tayyorlarni tozalash", Style.QUIET) { vm.clearCompleted() }, LinearLayout.LayoutParams(0, 42.dp, 1f))
+        clear.addView(button("Tayyorlar tarixini tozalash", Style.QUIET) {
+            AlertDialog.Builder(this).setMessage("Tayyor vazifalar ro‘yxatdan va ilova kutubxonasidan yo‘qoladi. Fayllar qurilma xotirasida qoladi.")
+                .setPositiveButton("Tarixni tozalash") { _, _ -> vm.clearCompleted() }
+                .setNegativeButton("Bekor", null).show()
+        }, LinearLayout.LayoutParams(0, 42.dp, 1f))
         clear.addView(button("Xatolarni tozalash", Style.QUIET) { vm.clearFailed() }, LinearLayout.LayoutParams(0, 42.dp, 1f))
         body.addView(clear, spaced(top = 10))
     }
@@ -614,7 +622,9 @@ class MainActivity : AppCompatActivity() {
         matches.drop(libraryPage * 20).take(20).forEach { task ->
             val row = column().apply { setPadding(12.dp, 10.dp, 12.dp, 10.dp); background = shape(surface) }
             row.addView(text(task.title, 14f, ink, true).apply { maxLines = 2 })
-            row.addView(text("${task.kind} · ${DateFormat.getDateInstance().format(Date(task.updatedAt))} · ${if (task.kind == "MP3") "Music/CarTube" else "Movies/CarTube"} yoki tanlangan papka", 11f, muted))
+            val location = if (task.fileUri?.contains("/tree/") == true || task.fileUri?.contains("/document/") == true) "Tanlangan papka"
+                else if (task.kind == "MP3") "Music/CarTube" else "Movies/CarTube"
+            row.addView(text("${task.kind} · ${DateFormat.getDateInstance().format(Date(task.updatedAt))} · $location", 11f, muted))
             val actions = LinearLayout(this)
             actions.addView(button("Ochish", Style.SECONDARY) { play(task) }, LinearLayout.LayoutParams(0, 40.dp, 1f))
             actions.addView(button("O‘chirish", Style.QUIET) {
