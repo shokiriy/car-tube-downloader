@@ -3,6 +3,7 @@ package com.shokirjon.cartubedownloader.db
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 @Entity(tableName = "download_tasks", indices = [Index("canonicalUrl"), Index("queueOrder")])
 data class DownloadTask(
@@ -45,7 +46,9 @@ data class TrackedPlaylist(
     val quality: String,
     val lastChecked: Long?,
     val knownCount: Int,
-    val newCount: Int
+    val newCount: Int,
+    val totalCount: Int? = null,
+    @ColumnInfo(defaultValue = "0") val remoteOffset: Int = 0
 )
 
 @Entity(tableName = "playlist_items", primaryKeys = ["playlistId", "videoId"], indices = [Index("videoId")])
@@ -58,5 +61,6 @@ data class PlaylistEntry(
     val position: Int,
     val selected: Boolean,
     val queued: Boolean,
-    val firstSeen: Long
+    val firstSeen: Long,
+    val duration: Long? = null
 )

@@ -75,7 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             is YouTubeTarget.Playlist -> {
                                 app.playlists.add(target.canonicalUrl)
-                                app.playlists.sync(target.id)
+                                app.playlists.sync(target.id, initialPageOnly = true)
                                 _loadedPlaylistId.value = target.id
                                 DiagnosticLog.record(app, "PLAYLIST_TIMING ${target.id}", "elapsed=${SystemClock.elapsedRealtime() - startedAt}ms")
                                 playlistCount++
@@ -131,7 +131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         try {
             val playlist = app.playlists.add(url, interval, wifi, autoAdd, kind, quality)
-            val count = app.playlists.sync(playlist.id)
+            val count = app.playlists.sync(playlist.id, initialPageOnly = !autoAdd)
             _loadedPlaylistId.value = playlist.id
             PlaylistScheduler.schedule(app)
             _message.value = "Playlist saved: $count items discovered."
@@ -162,7 +162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { _message.value = e.message ?: "Could not queue playlist." }
         finally { _busy.value = false }
     }
-    suspend fun playlistPage(id: String, offset: Int) = app.playlists.page(id, offset, 20)
+    suspend fun playlistPage(id: String, offset: Int, limit: Int = 24) = app.playlists.page(id, offset, limit)
     suspend fun playlistSelect(id: String, videoId: String, selected: Boolean) = app.playlists.select(id, videoId, selected)
     suspend fun playlistSelectAll(id: String, selected: Boolean) = app.playlists.selectAll(id, selected)
     suspend fun playlistSelectOnlyNew(id: String) = app.playlists.selectOnlyNew(id)

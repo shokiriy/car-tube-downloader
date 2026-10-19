@@ -12,12 +12,12 @@ sealed interface EnqueueResult {
 
 class DownloadRepository(private val dao: CarTubeDao) {
     val tasks = dao.tasks()
-    suspend fun enqueue(info: MediaInfo, originalUrl: String, kind: OutputKind, quality: String): EnqueueResult {
+    suspend fun enqueue(info: MediaInfo, originalUrl: String, kind: OutputKind, quality: String, playlistId: String? = null): EnqueueResult {
         val target = YouTubeUrlParser.parse(originalUrl) as? YouTubeTarget.Video ?: throw IllegalArgumentException("A single video URL is required.")
         val previous = dao.latest(target.canonicalUrl, kind.name, quality)
         if (previous != null && previous.state !in setOf("FAILED", "CANCELLED", "PAUSED", "INTERRUPTED")) return EnqueueResult.Duplicate(previous)
         val now = System.currentTimeMillis()
-        val task = DownloadTask(UUID.randomUUID().toString(), originalUrl, target.canonicalUrl, info.id, target.playlistId,
+        val task = DownloadTask(UUID.randomUUID().toString(), originalUrl, target.canonicalUrl, info.id, playlistId ?: target.playlistId,
             info.title, info.channel, info.thumbnail, info.duration, kind.name, quality, TaskState.PENDING.name, 0f, 0, info.size,
             null, null, "Queued", null, null, null, 0, dao.nextOrder(), now, now)
         dao.insert(task)

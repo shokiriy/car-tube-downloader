@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
+import android.os.PowerManager
 
 /** One small, lifecycle-bound border animation. No layout or bitmap work per frame. */
 class AnimatedInputFrame(context: Context) : FrameLayout(context) {
@@ -32,7 +33,19 @@ class AnimatedInputFrame(context: Context) : FrameLayout(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (ValueAnimator.areAnimatorsEnabled()) animator.start()
+        updateMotion()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        updateMotion()
+    }
+
+    private fun updateMotion() {
+        val powerSave = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isPowerSaveMode
+        if (isAttachedToWindow && windowVisibility == VISIBLE && ValueAnimator.areAnimatorsEnabled() && !powerSave) {
+            if (!animator.isStarted) animator.start()
+        } else animator.cancel()
     }
 
     override fun onDetachedFromWindow() {

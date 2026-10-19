@@ -51,7 +51,8 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
                 val entry = array.optJSONObject(index) ?: return@mapNotNull null
                 val id = entry.textOrNull("id")?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) } ?: return@mapNotNull null
                 val title = entry.textOrNull("title")?.takeUnless { it.equals("[Private video]", true) || it.equals("[Deleted video]", true) } ?: return@mapNotNull null
-                PlaylistItem(id, title, "https://www.youtube.com/watch?v=$id", entry.textOrNull("thumbnail"))
+                PlaylistItem(id, title, "https://www.youtube.com/watch?v=$id", entry.textOrNull("thumbnail"),
+                    entry.optLong("duration").takeIf { it > 0 })
             }
             PlaylistPage(target.id, json.optString("title", "Playlist"), json.optInt("playlist_count").takeIf { it > 0 }, items)
         } catch (e: Exception) {

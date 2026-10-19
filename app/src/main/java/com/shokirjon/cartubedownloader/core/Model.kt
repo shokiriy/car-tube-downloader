@@ -8,7 +8,7 @@ enum class ErrorCategory { INVALID_URL, UNSUPPORTED_URL, NETWORK, RATE_LIMITED, 
 
 data class MediaFormat(val id: String, val ext: String?, val height: Int?, val vcodec: String?, val acodec: String?, val size: Long?)
 data class MediaInfo(val id: String, val title: String, val channel: String, val duration: Long?, val thumbnail: String?, val url: String, val formats: List<MediaFormat>, val size: Long?)
-data class PlaylistItem(val id: String, val title: String, val url: String, val thumbnail: String?)
+data class PlaylistItem(val id: String, val title: String, val url: String, val thumbnail: String?, val duration: Long? = null)
 data class PlaylistPage(val id: String, val title: String, val count: Int?, val items: List<PlaylistItem>)
 data class TransferProgress(val percent: Float?, val downloaded: Long?, val total: Long?, val speed: Long?, val etaSeconds: Long?, val stage: String?)
 data class EngineHealth(val ready: Boolean, val detail: String, val ytDlpVersion: String?, val abi: String)

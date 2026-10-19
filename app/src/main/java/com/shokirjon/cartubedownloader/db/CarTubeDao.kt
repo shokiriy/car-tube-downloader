@@ -30,10 +30,12 @@ interface CarTubeDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertItem(item: PlaylistEntry): Long
     @Query("SELECT * FROM playlist_items WHERE playlistId=:id ORDER BY position LIMIT :limit OFFSET :offset") suspend fun playlistPage(id: String, limit: Int, offset: Int): List<PlaylistEntry>
     @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId=:id") suspend fun playlistCount(id: String): Int
-    @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId=:id AND selected=1") suspend fun selectedCount(id: String): Int
+    @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId=:id AND selected=1 AND queued=0") suspend fun selectedCount(id: String): Int
+    @Query("SELECT * FROM playlist_items WHERE playlistId=:id AND videoId=:videoId LIMIT 1") suspend fun playlistItem(id: String, videoId: String): PlaylistEntry?
     @Query("SELECT * FROM playlist_items WHERE playlistId=:id AND selected=1 AND queued=0 ORDER BY position") suspend fun selectedUnqueued(id: String): List<PlaylistEntry>
     @Query("SELECT * FROM playlist_items WHERE playlistId=:id ORDER BY firstSeen DESC, position DESC LIMIT :limit") suspend fun newestItems(id: String, limit: Int): List<PlaylistEntry>
-    @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id") suspend fun selectAll(id: String, selected: Boolean)
-    @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id AND videoId=:videoId") suspend fun selectItem(id: String, videoId: String, selected: Boolean)
-    @Query("UPDATE playlist_items SET queued=1 WHERE playlistId=:id AND videoId=:videoId") suspend fun markQueued(id: String, videoId: String)
+    @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id AND queued=0") suspend fun selectAll(id: String, selected: Boolean)
+    @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id AND videoId=:videoId AND queued=0") suspend fun selectItem(id: String, videoId: String, selected: Boolean)
+    @Query("UPDATE playlist_items SET queued=1, selected=0 WHERE playlistId=:id AND videoId=:videoId") suspend fun markQueued(id: String, videoId: String)
+    @Query("UPDATE playlist_items SET queued=0 WHERE playlistId=:id AND videoId=:videoId") suspend fun unmarkQueued(id: String, videoId: String)
 }

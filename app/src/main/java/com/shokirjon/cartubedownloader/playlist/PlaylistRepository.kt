@@ -5,6 +5,7 @@ import com.shokirjon.cartubedownloader.db.CarTubeDao
 import com.shokirjon.cartubedownloader.db.PlaylistEntry
 import com.shokirjon.cartubedownloader.db.TrackedPlaylist
 import com.shokirjon.cartubedownloader.download.DownloadRepository
+import com.shokirjon.cartubedownloader.download.EnqueueResult
 import com.shokirjon.cartubedownloader.extractor.MediaExtractor
 import com.shokirjon.cartubedownloader.settings.SettingsStore
 
@@ -20,11 +21,26 @@ class PlaylistRepository(
         val target = YouTubeUrlParser.parse(url) as? YouTubeTarget.Playlist ?: throw IllegalArgumentException("Enter a playlist URL.")
         val existing = dao.playlist(target.id)
         val saved = TrackedPlaylist(target.id, target.canonicalUrl, existing?.title ?: "Loading playlist", interval, wifiOnly,
-            autoAdd, kind.name, quality, existing?.lastChecked, existing?.knownCount ?: 0, existing?.newCount ?: 0)
+            autoAdd, kind.name, quality, existing?.lastChecked, existing?.knownCount ?: 0, existing?.newCount ?: 0,
+            existing?.totalCount, existing?.remoteOffset ?: 0)
         dao.upsertPlaylist(saved)
         return saved
     }
-    suspend fun page(id: String, offset: Int, limit: Int = 50) = dao.playlistPage(id, limit.coerceIn(1, 50), offset.coerceAtLeast(0))
+    suspend fun page(id: String, offset: Int, limit: Int = 50): List<PlaylistEntry> {
+        val size = limit.coerceIn(1, 50)
+        val start = offset.coerceAtLeast(0)
+        var rows = dao.playlistPage(id, size, start)
+        var saved = dao.playlist(id) ?: return rows
+        // Old databases have no remote cursor: a manual refresh can establish a new cursor.
+        while (rows.size < size && saved.remoteOffset > 0 && (saved.totalCount == null || saved.remoteOffset < saved.totalCount) && saved.remoteOffset < 10_000) {
+            val before = saved.remoteOffset
+            fetchBatch(saved, before)
+            saved = dao.playlist(id) ?: break
+            if (saved.remoteOffset <= before) break
+            rows = dao.playlistPage(id, size, start)
+        }
+        return rows
+    }
     suspend fun selectAll(id: String, value: Boolean) = dao.selectAll(id, value)
     suspend fun select(id: String, videoId: String, value: Boolean) = dao.selectItem(id, videoId, value)
     suspend fun selectOnlyNew(id: String): Int {
@@ -34,40 +50,57 @@ class PlaylistRepository(
         newest.forEach { dao.selectItem(id, it.videoId, true) }
         return newest.size
     }
-    suspend fun selectedCount(id: String) = dao.selectedUnqueued(id).size
+    suspend fun selectedCount(id: String) = dao.selectedCount(id)
     suspend fun remove(id: String) = dao.removePlaylist(id)
 
-    suspend fun sync(id: String): Int {
+    suspend fun sync(id: String, initialPageOnly: Boolean = false): Int {
         val saved = dao.playlist(id) ?: throw IllegalArgumentException("Unknown playlist")
         var offset = 0
         var newCount = 0
         var title = saved.title
         val newEntries = mutableListOf<PlaylistEntry>()
+        var total: Int? = saved.totalCount
         while (offset < 10_000) {
             val batch = extractor.extractPlaylist(saved.url, offset, 50)
             title = batch.title
+            total = batch.count ?: total
             batch.items.forEachIndexed { index, item ->
                 val row = PlaylistEntry(id, item.id, item.title, item.url, item.thumbnail, offset + index,
-                    saved.autoAdd, false, System.currentTimeMillis())
+                    saved.autoAdd, false, System.currentTimeMillis(), item.duration)
                 if (dao.insertItem(row) != -1L) { newCount++; if (saved.autoAdd) newEntries.add(row) }
             }
             offset += 50
-            if (batch.count != null && offset >= batch.count) break
+            if (initialPageOnly || (batch.count != null && offset >= batch.count)) break
             if (batch.items.isEmpty() && batch.count == null) break
         }
-        dao.upsertPlaylist(saved.copy(title = title, lastChecked = System.currentTimeMillis(), knownCount = dao.playlistCount(id), newCount = newCount))
+        dao.upsertPlaylist(saved.copy(title = title, lastChecked = System.currentTimeMillis(), knownCount = dao.playlistCount(id),
+            newCount = newCount, totalCount = total, remoteOffset = offset))
         if (saved.autoAdd) {
             for (item in newEntries) {
                 try {
                     val info = extractor.extractInfo(item.url)
                     val kind = OutputKind.valueOf(saved.outputKind)
                     val quality = saved.quality
-                    downloads.enqueue(info, item.url, kind, quality)
+                    downloads.enqueue(info, item.url, kind, quality, id)
                     dao.markQueued(id, item.videoId)
                 } catch (_: Exception) { /* Item remains unqueued for manual review and retry. */ }
             }
         }
         return newCount
+    }
+
+    private suspend fun fetchBatch(saved: TrackedPlaylist, offset: Int) {
+        val batch = extractor.extractPlaylist(saved.url, offset, 50)
+        val now = System.currentTimeMillis()
+        var added = 0
+        batch.items.forEachIndexed { index, item ->
+            val row = PlaylistEntry(saved.id, item.id, item.title, item.url, item.thumbnail, offset + index,
+                false, false, now, item.duration)
+            if (dao.insertItem(row) != -1L) added++
+        }
+        dao.upsertPlaylist(saved.copy(title = batch.title, knownCount = dao.playlistCount(saved.id),
+            newCount = saved.newCount + added, totalCount = batch.count ?: (if (batch.items.isEmpty()) offset else saved.totalCount),
+            remoteOffset = if (batch.items.isEmpty()) (batch.count ?: offset) else offset + 50))
     }
 
     suspend fun queueSelected(id: String, kind: OutputKind, quality: String): Pair<Int, Int> {
@@ -76,9 +109,9 @@ class PlaylistRepository(
         for (item in selected) {
             try {
                 val info = extractor.extractInfo(item.url)
-                downloads.enqueue(info, item.url, kind, quality)
+                val result = downloads.enqueue(info, item.url, kind, quality, id)
                 dao.markQueued(id, item.videoId)
-                added++
+                if (result is EnqueueResult.Added) added++
             } catch (_: Exception) { failed++ }
         }
         return added to failed
