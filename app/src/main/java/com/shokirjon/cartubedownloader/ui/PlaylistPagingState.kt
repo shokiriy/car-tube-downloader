@@ -14,7 +14,7 @@ internal class PlaylistPagingState(val playlistId: String, val pageSize: Int = 2
     private val seen = mutableSetOf<String>()
 
     fun begin(): Int? {
-        if (loading || exhausted) return null
+        if (loading || exhausted || failed) return null
         loading = true
         failed = false
         return items.size
@@ -28,6 +28,8 @@ internal class PlaylistPagingState(val playlistId: String, val pageSize: Int = 2
     }
 
     fun fail() { loading = false; failed = true }
+
+    fun retry() { failed = false }
 
     fun allowMore() { exhausted = false }
 

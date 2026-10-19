@@ -680,7 +680,10 @@ class MainActivity : AppCompatActivity() {
         footer.removeAllViews()
         when {
             state.loading -> footer.addView(text("◌  Yuklanmoqda…", 11f, muted))
-            state.failed -> footer.addView(button("Xatolik · Qayta urinish", Style.QUIET) { loadNextPage(state.playlistId) })
+            state.failed -> footer.addView(button("Xatolik · Qayta urinish", Style.QUIET) {
+                state.retry()
+                loadNextPage(state.playlistId)
+            })
             state.items.isEmpty() && state.exhausted -> footer.addView(text("Video topilmadi", 12f, muted))
         }
     }

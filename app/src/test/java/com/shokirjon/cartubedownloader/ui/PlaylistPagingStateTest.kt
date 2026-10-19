@@ -31,6 +31,8 @@ class PlaylistPagingStateTest {
         assertEquals(24, state.begin())
         state.fail()
         assertTrue(state.failed)
+        assertNull(state.begin())
+        state.retry()
         assertEquals(24, state.begin())
         state.append((24 until 48).map(::entry))
         assertTrue(state.items[15].selected)
