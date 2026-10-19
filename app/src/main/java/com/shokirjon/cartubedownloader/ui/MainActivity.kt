@@ -65,11 +65,12 @@ class MainActivity : AppCompatActivity() {
     private val danger = Color.rgb(255, 167, 159)
     private val portrait get() = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
     private val images by lazy { ThumbnailLoader(this) }
-    private val previewPlayer by lazy { YouTubePreview(this) { showEmbedFallback() } }
+    private val previewPlayer by lazy { YouTubePreview(this) { id, code -> showEmbedFallback(id, code) } }
     private val localPreview by lazy { LocalVideoPreview(this) }
     private var previewDialog: AlertDialog? = null
     private var activePreviewId: String? = null
     private var unavailablePreviewId: String? = null
+    private var embedFailureCode: Int? = null
     private var modalVideo: FrameLayout? = null
     private var parkedForPreview = false
     private var playlistShell: LinearLayout? = null
@@ -566,21 +567,23 @@ class MainActivity : AppCompatActivity() {
             addView(image, FrameLayout.LayoutParams(-1, -1))
             addView(duration, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0, 0, 3.dp, 3.dp) })
         }
+        private val playerHost = FrameLayout(this@MainActivity).apply { visibility = View.GONE }
         private val title = text("", 13f, ink, true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         private val status = text("", 11f, muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         private val retry = button("↻", Style.QUIET) {}.apply { contentDescription = "Qayta yuklash" }
         private val expand = button("⤢", Style.QUIET) {}.apply { contentDescription = "Katta oynada ko‘rish" }
+        private val details = column()
+        private val previewActions = column().apply { gravity = Gravity.TOP; visibility = View.GONE }
         private val progressBar = ProgressBar(this@MainActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000; progressTintList = ColorStateList.valueOf(accent)
         }
-        private val previewBox = FrameLayout(this@MainActivity)
         private var boundId: String? = null
 
         init {
             root.tag = this
+            frame.addView(playerHost, FrameLayout.LayoutParams(-1, -1))
             line.addView(check, LinearLayout.LayoutParams(45.dp, 52.dp))
             line.addView(frame, LinearLayout.LayoutParams(112.dp, 63.dp).apply { rightMargin = 9.dp })
-            val details = column()
             details.addView(title)
             val small = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
             small.addView(status, LinearLayout.LayoutParams(0, -2, 1f))
@@ -588,9 +591,15 @@ class MainActivity : AppCompatActivity() {
             small.addView(expand, LinearLayout.LayoutParams(38.dp, 38.dp))
             details.addView(small)
             line.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            previewActions.addView(button("×", Style.QUIET) { openInline(boundId ?: return@button) }
+                .apply { contentDescription = "Kichik videoni yopish" }, LinearLayout.LayoutParams(44.dp, 44.dp))
+            previewActions.addView(button("⤢", Style.QUIET) {
+                val id = boundId ?: return@button
+                openLarge(id, title.text.toString())
+            }.apply { contentDescription = "Videoni kattalashtirish" }, LinearLayout.LayoutParams(44.dp, 44.dp))
+            line.addView(previewActions)
             root.addView(line)
             root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 45.dp; topMargin = 2.dp })
-            root.addView(previewBox, LinearLayout.LayoutParams(-1, 0).apply { leftMargin = 45.dp; topMargin = 4.dp })
         }
 
         fun bind(entry: PlaylistEntry) {
@@ -621,17 +630,31 @@ class MainActivity : AppCompatActivity() {
             title.setOnLongClickListener { openLarge(entry.videoId, entry.title); true }
             expand.setOnClickListener { openLarge(entry.videoId, entry.title) }
             showStatus(entry)
-            if (activePreviewId == entry.videoId && previewDialog?.isShowing != true) {
-                previewBox.visibility = View.VISIBLE
-                val availableWidth = ((playlistList?.width ?: resources.displayMetrics.widthPixels) - 45.dp).coerceAtLeast(200)
-                previewBox.layoutParams = (previewBox.layoutParams as LinearLayout.LayoutParams).apply { height = (availableWidth * 9f / 16f).toInt().coerceAtLeast(200) }
-                if (unavailablePreviewId == entry.videoId) embedFallback(previewBox, entry.videoId)
-                else attachPreview(previewBox, entry.videoId)
+            val inline = activePreviewId == entry.videoId && previewDialog?.isShowing != true
+            val frameParams = frame.layoutParams as LinearLayout.LayoutParams
+            if (inline) {
+                // Replace the thumbnail in place. The official embed requires at least 200x200 CSS pixels.
+                frameParams.width = 0; frameParams.height = 200.dp; frameParams.weight = 1f
+                frameParams.rightMargin = 4.dp
+                details.visibility = View.GONE
+                previewActions.visibility = View.VISIBLE
+                image.visibility = View.GONE; duration.visibility = View.GONE
+                playerHost.visibility = View.VISIBLE
+                if (unavailablePreviewId == entry.videoId) embedFallback(playerHost, entry.videoId)
+                else attachPreview(playerHost, entry.videoId)
             } else {
-                if (previewBox.childCount > 0) previewBox.removeAllViews()
-                previewBox.visibility = View.GONE
-                previewBox.layoutParams = (previewBox.layoutParams as LinearLayout.LayoutParams).apply { height = 0 }
+                if (playerHost.childCount > 0) {
+                    closePreview()
+                    playerHost.removeAllViews()
+                }
+                playerHost.visibility = View.GONE
+                image.visibility = View.VISIBLE
+                frameParams.width = 112.dp; frameParams.height = 63.dp; frameParams.weight = 0f
+                frameParams.rightMargin = 9.dp
+                details.visibility = View.VISIBLE
+                previewActions.visibility = View.GONE
             }
+            frame.layoutParams = frameParams
         }
 
         fun showStatus(entry: PlaylistEntry) {
@@ -752,16 +775,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openInline(id: String) = confirmPreview {
+        val list = playlistList
+        val first = list?.firstVisiblePosition ?: 0
+        val top = list?.getChildAt(0)?.top ?: 0
         if (activePreviewId == id) {
             activePreviewId = null; closePreview()
         } else {
-            closePreview(); unavailablePreviewId = null; activePreviewId = id
+            closePreview(); unavailablePreviewId = null; embedFailureCode = null; activePreviewId = id
         }
         playlistAdapter?.notifyDataSetChanged()
+        list?.setSelectionFromTop(first, top)
     }
 
     private fun openLarge(id: String, title: String) = confirmPreview {
-        if (activePreviewId != id) { closePreview(); unavailablePreviewId = null; activePreviewId = id }
+        if (activePreviewId != id) { closePreview(); unavailablePreviewId = null; embedFailureCode = null; activePreviewId = id }
         previewDialog?.dismiss()
         val body = column().apply { setPadding(10.dp, 10.dp, 10.dp, 10.dp); background = shape(bg, 12) }
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -772,8 +799,7 @@ class MainActivity : AppCompatActivity() {
         val video = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         modalVideo = video
         val width = minOf(resources.displayMetrics.widthPixels - 42.dp, 760.dp)
-        body.addView(video, LinearLayout.LayoutParams(-1, (width * 9f / 16f).toInt()))
-        body.addView(button("YouTube’da ochish", Style.QUIET) { openYouTube(id) }, spaced(top = 4))
+        body.addView(video, LinearLayout.LayoutParams(-1, (width * 9f / 16f).toInt().coerceAtLeast(200.dp)))
         dialog.setOnDismissListener {
             previewDialog = null
             val list = playlistList
@@ -803,8 +829,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun closePreview() { previewPlayer.close(); localPreview.close() }
 
-    private fun showEmbedFallback() {
-        val id = activePreviewId ?: return
+    private fun showEmbedFallback(failedVideoId: String?, code: Int?) {
+        val id = activePreviewId?.takeIf { it == failedVideoId } ?: return
+        DiagnosticLog.record(this, "preview-embed-error", "YouTube error code: ${code ?: "unknown"}")
+        embedFailureCode = code
         unavailablePreviewId = id
         previewPlayer.close()
         if (previewDialog?.isShowing == true) modalVideo?.let { embedFallback(it, id) }
@@ -814,7 +842,7 @@ class MainActivity : AppCompatActivity() {
     private fun embedFallback(parent: FrameLayout, id: String) {
         parent.removeAllViews()
         val content = column().apply { gravity = Gravity.CENTER; setPadding(8.dp, 5.dp, 8.dp, 5.dp) }
-        content.addView(text("Bu videoni ichki oynada ko‘rib bo‘lmadi", 12f, ink), spaced(bottom = 7))
+        content.addView(text(EmbedErrors.message(embedFailureCode), 12f, ink), spaced(bottom = 7))
         content.addView(button("YouTube’da ochish", Style.SELECTED) { openYouTube(id) })
         parent.addView(content, FrameLayout.LayoutParams(-1, -1))
     }

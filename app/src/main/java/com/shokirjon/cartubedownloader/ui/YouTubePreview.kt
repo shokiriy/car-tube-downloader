@@ -12,8 +12,10 @@ import android.webkit.WebViewClient
 import android.webkit.RenderProcessGoneDetail
 
 /** Exactly one on-demand official IFrame player; moving its view between inline and dialog preserves playback. */
-internal class YouTubePreview(private val context: Context, private val onUnavailable: () -> Unit) {
+internal class YouTubePreview(private val context: Context, private val onUnavailable: (String?, Int?) -> Unit) {
     private var view: WebView? = null
+    // YouTube requires the installed app ID as the WebView Referer, not youtube.com.
+    private val appOrigin = "https://${context.packageName.lowercase()}"
     var videoId: String? = null
         private set
 
@@ -29,7 +31,11 @@ internal class YouTubePreview(private val context: Context, private val onUnavai
             web.settings.allowContentAccess = false
             web.webChromeClient = object : WebChromeClient() {
                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                    if (message.message().startsWith("CAR_TUBE_EMBED_ERROR:")) web.post { onUnavailable() }
+                    if (message.message().startsWith("CAR_TUBE_EMBED_ERROR:")) {
+                        val code = message.message().substringAfter(':').toIntOrNull()
+                        val failedVideo = videoId
+                        web.post { onUnavailable(failedVideo, code) }
+                    }
                     return super.onConsoleMessage(message)
                 }
             }
@@ -42,8 +48,9 @@ internal class YouTubePreview(private val context: Context, private val onUnavai
                     (view.parent as? ViewGroup)?.removeView(view)
                     view.destroy()
                     this@YouTubePreview.view = null
+                    val failedVideo = videoId
                     videoId = null
-                    onUnavailable()
+                    onUnavailable(failedVideo, null)
                     return true
                 }
             }
@@ -54,7 +61,8 @@ internal class YouTubePreview(private val context: Context, private val onUnavai
         parent.addView(player, ViewGroup.LayoutParams(-1, -1))
         if (videoId != id) {
             videoId = id
-            player.loadDataWithBaseURL("https://www.youtube.com/", html(id), "text/html", "UTF-8", null)
+            val baseUrl = "$appOrigin/"
+            player.loadDataWithBaseURL(baseUrl, html(id), "text/html", "UTF-8", baseUrl)
         } else player.onResume()
     }
 
@@ -73,13 +81,13 @@ internal class YouTubePreview(private val context: Context, private val onUnavai
         videoId = null
     }
 
-    private fun html(id: String) = """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"></head>
+    private fun html(id: String) = """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"></head>
       <body style="background:#000;margin:0"><div id="player"></div>
       <script src="https://www.youtube.com/iframe_api"></script><script>
       var player;
       function onYouTubeIframeAPIReady() {
         player = new YT.Player('player', {width:'100%',height:'100%',videoId:'$id',
-          playerVars:{playsinline:1,controls:1,origin:'https://www.youtube.com'},
+          playerVars:{playsinline:1,controls:1,origin:'$appOrigin'},
           events:{onReady:function(e){e.target.playVideo()},onError:function(e){console.log('CAR_TUBE_EMBED_ERROR:'+e.data)}}});
       }
       </script><style>html,body,#player{width:100%;height:100%;overflow:hidden}</style></body></html>"""
