@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
 import android.os.StatFs
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -85,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private var libraryAlphabetical = false
     private var libraryPage = 0
     private var queuePage = 0
+    private var lastQueueRefreshAt = 0L
     private var sheet: AlertDialog? = null
     private var sheetKind: String? = null
     private var sheetBody: LinearLayout? = null
@@ -143,7 +145,7 @@ class MainActivity : AppCompatActivity() {
             launch { vm.tasks.collect { tasks ->
                 renderMiniPanel()
                 updatePlaylistStatuses(tasks)
-                if (sheetKind == "queue") renderQueueSheet()
+                if (sheetKind == "queue" && SystemClock.elapsedRealtime() - lastQueueRefreshAt >= 1200L) renderQueueSheet()
                 val finished = tasks.count { it.state == "COMPLETED" }
                 if (sheetKind == "library" && finished != libraryCount) renderLibrarySheet()
                 if (finished != lastCompletedCount && mode == 0 && vm.previews.value.isEmpty()) renderWorkspace()
@@ -495,6 +497,7 @@ class MainActivity : AppCompatActivity() {
         miniPanel.removeAllViews()
         val tasks = vm.tasks.value
         val active = tasks.firstOrNull { it.state in listOf("ANALYZING", "DOWNLOADING", "PROCESSING") }
+        val paused = tasks.firstOrNull { it.state in listOf("PAUSED", "INTERRUPTED") }
         val waiting = tasks.count { it.state in listOf("PENDING", "QUEUED") }
         val completed = tasks.count { it.state == "COMPLETED" }
         val failed = tasks.count { it.state == "FAILED" }
@@ -514,6 +517,11 @@ class MainActivity : AppCompatActivity() {
             miniPanel.addView(progress(active), LinearLayout.LayoutParams(-1, 4.dp).apply { topMargin = 3.dp })
             val details = "${stateLabel(active.state)} · ${active.progress.toInt()}% · ${active.downloadedBytes / 1048576} MB${active.totalBytes?.let { "/${it / 1048576} MB" }.orEmpty()}${active.speed?.let { " · ${it / 1024} KB/s" }.orEmpty()}${active.etaSeconds?.let { " · ~${it}s" }.orEmpty()}"
             miniPanel.addView(text(details, 11f, muted).apply { maxLines = 1 }, spaced(top = 4))
+        } else if (paused != null) {
+            val line = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+            line.addView(text("${stateLabel(paused.state)} · ${paused.title}", 12f, ink).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, -2, 1f))
+            line.addView(button("Davom", Style.SELECTED) { vm.queueAction(paused.id, "retry") }, LinearLayout.LayoutParams(74.dp, 38.dp))
+            miniPanel.addView(line)
         } else {
             miniPanel.addView(text(if (waiting > 0) "Keyingi vazifa kutilmoqda" else "Havola qo‘ying va yuklashni boshlang", 12f, muted), spaced(top = 4))
         }
@@ -553,6 +561,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderQueueSheet() {
         if (sheetKind != "queue") return
+        lastQueueRefreshAt = SystemClock.elapsedRealtime()
         val body = sheetBody ?: return
         body.removeAllViews()
         val tasks = vm.tasks.value
