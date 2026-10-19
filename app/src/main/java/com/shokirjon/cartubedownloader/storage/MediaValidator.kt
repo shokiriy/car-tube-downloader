@@ -1,27 +1,54 @@
 package com.shokirjon.cartubedownloader.storage
 
-import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import com.shokirjon.cartubedownloader.core.EngineException
 import com.shokirjon.cartubedownloader.core.ErrorCategory
 import com.shokirjon.cartubedownloader.core.OutputKind
 import java.io.File
-import java.util.concurrent.TimeUnit
+import java.nio.ByteBuffer
 
-class MediaValidator(private val context: Context) {
+/** Verify the finished file with Android's own demuxer before making it visible in MediaStore. */
+class MediaValidator {
     fun validate(file: File, kind: OutputKind) {
-        if (!file.isFile || file.length() < 1024L) throw EngineException(ErrorCategory.CONVERSION, "The output file is empty or incomplete.")
-        val ffprobe = File(context.applicationInfo.nativeLibraryDir, "libffprobe.so")
-        if (!ffprobe.isFile) throw EngineException(ErrorCategory.CONVERSION, "FFprobe is missing from this APK.")
-        val p = try {
-            ProcessBuilder(ffprobe.absolutePath, "-v", "error", "-show_entries", "format=format_name", "-show_entries", "stream=codec_type,codec_name", "-of", "default=noprint_wrappers=1", file.absolutePath)
-                .redirectErrorStream(true).apply { environment()["LD_LIBRARY_PATH"] = File(context.noBackupFilesDir, "youtubedl-android/packages/ffmpeg/usr/lib").absolutePath }.start()
-        } catch (e: Exception) { throw EngineException(ErrorCategory.CONVERSION, "FFprobe could not start.", e.toString(), e) }
-        if (!p.waitFor(25, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException(ErrorCategory.CONVERSION, "Media validation timed out.") }
-        val output = p.inputStream.bufferedReader().readText().take(3000)
-        if (p.exitValue() != 0) throw EngineException(ErrorCategory.CONVERSION, "The media file is not playable.", output)
-        if (kind == OutputKind.MP3 && (!output.contains("format_name=mp3") || !output.contains("codec_name=mp3") || !output.contains("codec_type=audio")))
-            throw EngineException(ErrorCategory.CONVERSION, "The output is not a real MP3 file.", output)
-        if (kind == OutputKind.MP4 && (!output.contains("mp4") || !output.contains("codec_type=video") || !output.contains("codec_name=h264") || !output.contains("codec_type=audio") || !output.contains("codec_name=aac")))
-            throw EngineException(ErrorCategory.CODEC, "The output is not an Android-compatible H.264 MP4.", output)
+        if (!file.isFile || file.length() < 1024L)
+            throw EngineException(ErrorCategory.CONVERSION, "The output file is empty or incomplete.")
+        val extension = if (kind == OutputKind.MP3) "mp3" else "mp4"
+        if (!file.extension.equals(extension, true))
+            throw EngineException(ErrorCategory.CONVERSION, "The output filename is not .$extension.")
+        if (kind == OutputKind.MP4) {
+            val header = ByteArray(8)
+            try {
+                file.inputStream().use {
+                    if (it.read(header) != 8 || String(header, 4, 4, Charsets.US_ASCII) != "ftyp")
+                        throw EngineException(ErrorCategory.CONVERSION, "The output is not an MP4 container.")
+                }
+            } catch (e: EngineException) { throw e }
+            catch (e: Exception) { throw EngineException(ErrorCategory.FILE_WRITE, "Could not read the output file.", e.toString(), e) }
+        }
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val tracks = mutableListOf<String>()
+            for (index in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
+                tracks.add(mime)
+                if (mime == "audio/mpeg" || mime == "audio/mp4a-latm" || mime == "video/avc") {
+                    extractor.selectTrack(index)
+                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                    if (extractor.readSampleData(ByteBuffer.allocate(4096), 0) <= 0)
+                        throw EngineException(ErrorCategory.CONVERSION, "The output contains an empty media track.", "track=$mime, bytes=${file.length()}")
+                    extractor.unselectTrack(index)
+                }
+            }
+            val valid = if (kind == OutputKind.MP3) "audio/mpeg" in tracks
+                else "video/avc" in tracks && "audio/mp4a-latm" in tracks
+            if (!valid) throw EngineException(ErrorCategory.CODEC,
+                if (kind == OutputKind.MP3) "The output is not a playable MP3."
+                else "The MP4 requires H.264 video and AAC audio.", "tracks=$tracks, bytes=${file.length()}")
+        } catch (e: EngineException) { throw e }
+        catch (e: Exception) { throw EngineException(ErrorCategory.CONVERSION,
+            "Android could not open the finished media file.", "${e.javaClass.simpleName}: ${e.message}; bytes=${file.length()}", e) }
+        finally { extractor.release() }
     }
 }

@@ -7,7 +7,7 @@ Native Kotlin Android 11 application for downloading publicly accessible YouTube
 - Conventional Android Views with an `AndroidViewModel`, coroutines, and StateFlow. The five tabs are Download, Queue, Library, Playlists, and Settings.
 - A `MediaExtractor` boundary isolates yt-dlp. `YtDlpExtractor` uses the Android Python wrapper (`youtubedl-android` 0.18.1), bundled yt-dlp 2026.08.19, `yt-dlp-ejs` 0.8.0, bundled QuickJS, and FFmpeg. Engine initialization installs EJS in the wrapper's Python 3.12 environment. No post-install tool download is required.
 - Room persists queue and playlist entries. A foreground service processes one download at a time, with typed failures, cancellation, bounded retry and interruption reconciliation. WorkManager schedules opt-in daily/weekly playlist checks; exact timing is not guaranteed.
-- Media is downloaded into private temporary storage, validated with FFprobe and published through MediaStore (`Music/CarTube`, `Movies/CarTube`) or an explicitly selected Storage Access Framework folder. The offline library uses Media3.
+- Media is downloaded into private temporary storage, checked with Android's MediaExtractor for playable audio/video tracks, and published through MediaStore (`Music/CarTube`, `Movies/CarTube`) or an explicitly selected Storage Access Framework folder. The offline library uses Media3.
 - ABI-specific APKs contain native components for `armeabi-v7a` and `arm64-v8a`. The target head unit's actual ABI must be checked during installation.
 
 ## Build
@@ -32,11 +32,13 @@ To sign a release APK, copy `keystore.properties.example` to `keystore.propertie
 4. Connect Wi-Fi, open CarTube Downloader, tap **Settings → Check engine**, then analyze an authorized public link. The health check only confirms bundled tools initialize; actual extraction requires a network test on the device.
 5. Completed files appear in Music/CarTube or Movies/CarTube and the in-app library. Choose a folder in Settings for USB/SD output.
 
-**Updating an earlier debug APK:** The 0.1.0 locally built APK and the 0.1.1 CI APK use different debug signing certificates. Android rejects an in-place update between them. Finish any queued downloads, uninstall the old app, then install 0.1.1. Uninstalling clears the app's queue, playlist records, and library database; completed media already published to Music/CarTube, Movies/CarTube, or a selected external folder remains in device storage but is not automatically re-imported into the in-app library. A stable user-owned release signing key is needed for seamless future upgrades; never commit it to this repository.
+**Updating an earlier debug APK:** CI debug APKs can use a different signing certificate on each run. Android may reject an in-place update to 0.1.2. Finish any queued downloads, uninstall the old app, then install the new APK if Android reports a signature conflict. Uninstalling clears the app's queue, playlist records, and library database; completed media already published to Music/CarTube, Movies/CarTube, or a selected external folder remains in device storage but is not automatically re-imported into the in-app library. A stable user-owned release signing key is needed for seamless future upgrades; never commit it to this repository.
 
 On a phone, the interface opens in portrait and follows Android's Auto-rotate setting when the phone turns landscape. The fixed landscape head unit continues to display landscape. After copying a link, tap **Joylash va tahlil qilish** (Paste and analyze), choose MP3 or MP4 and quality, then tap **Tanlanganlarni yuklab olish**. The **Navbat** tab shows progress; **Fayllar** lists completed media. If you type or share a link into the app instead, tap **Havolani tahlil qilish** first. For a playlist, open **Pleylist** after analysis to choose items. Only download content you are authorized to save.
 
 Audio bitrate is an encoding request, not a guarantee of source quality. Paused items safely restart if stream URLs are stale. The app needs enough free local storage for downloaded streams plus conversion; by default it reserves 1 GiB in addition to an estimated threefold working-space allowance. It does not promise background operation through vendor process kills, power loss, or system restrictions.
+
+If a device download still fails, use **Settings → Export log** and share the exported text together with the error shown in Queue. The diagnostic identifies extraction, network, or media validation errors without claiming a successful download from a partially downloaded file.
 
 ## Source and licenses
 

@@ -5,7 +5,6 @@ import android.os.Build
 import com.shokirjon.cartubedownloader.core.*
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.YoutubeDLException
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -69,15 +68,19 @@ class YtDlpExtractor(context: Context) : MediaExtractor {
                 request.addOption("-f", FormatSelector.mp4(quality)).addOption("--merge-output-format", "mp4")
             }
             val recent = ArrayDeque<String>()
-            YoutubeDL.execute(request, taskId, true) { _, _, line ->
+            val response = YoutubeDL.execute(request, taskId, true) { _, _, line ->
                 if (recent.size >= 12) recent.removeFirst()
                 recent.addLast(line.take(400))
                 onProgress(ProgressParser.parse(line))
             }
             if (cancelled.contains(taskId)) throw EngineException(ErrorCategory.CANCELLED, "Download cancelled.")
+            if (response.exitCode != 0) throw EngineException(ErrorCategory.EXTRACTION, "Media transfer did not finish.", response.err.take(2000))
             val extension = if (kind == OutputKind.MP3) "mp3" else "mp4"
-            workingDirectory.listFiles()?.firstOrNull { it.extension.equals(extension, true) && it.length() > 0L }
-                ?: throw EngineException(ErrorCategory.CONVERSION, "The media engine did not produce a valid $extension file.", recent.joinToString("\n"))
+            val videoId = (YouTubeUrlParser.parse(url) as? YouTubeTarget.Video)?.id
+                ?: throw EngineException(ErrorCategory.EXTRACTION, "Video ID is unavailable.")
+            DownloadedFileSelector.finalFile(workingDirectory, videoId, extension)
+                ?: throw EngineException(ErrorCategory.CONVERSION, "The media engine did not produce a complete $extension file.",
+                    "yt-dlp exit=${response.exitCode}; files=${workingDirectory.listFiles()?.joinToString { "${it.name}:${it.length()}" }}; output=${recent.joinToString(" | ")}".take(2500))
         } catch (e: Exception) {
             if (cancelled.contains(taskId)) throw EngineException(ErrorCategory.CANCELLED, "Download cancelled.")
             throw classify(e)

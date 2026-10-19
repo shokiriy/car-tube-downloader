@@ -21,7 +21,7 @@ class CarTubeApp : Application() {
     val extractor by lazy { YtDlpExtractor(this) }
     val downloads by lazy { DownloadRepository(dao) }
     val storage by lazy { StoragePublisher(this, settings) }
-    val validator by lazy { MediaValidator(this) }
+    val validator by lazy { MediaValidator() }
     val playlists by lazy { PlaylistRepository(dao, extractor, downloads, settings) }
     override fun onCreate() {
         super.onCreate()

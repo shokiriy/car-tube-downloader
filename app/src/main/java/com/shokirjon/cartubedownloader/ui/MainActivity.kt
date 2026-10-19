@@ -19,6 +19,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModelProvider
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -70,7 +73,13 @@ class MainActivity : AppCompatActivity() {
         playlistUrl = savedInstanceState?.getString("playlistUrl").orEmpty()
         window.statusBarColor = Color.rgb(9, 20, 29)
         window.navigationBarColor = Color.rgb(9, 20, 29)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(9, 20, 29)) }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets
+        }
         tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(panel) }
         listOf("Yuklash", "Navbat", "Fayllar", "Pleylist", "Sozlamalar").forEachIndexed { i, name ->
             tabs.addView(button(name) { navigate(i) }.apply {
@@ -90,6 +99,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         if (portrait) root.addView(tabs)
         setContentView(root)
+        ViewCompat.requestApplyInsets(root)
         if (savedInstanceState == null && intent?.action == Intent.ACTION_SEND) vm.inputText = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
         render()
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -285,7 +295,7 @@ class MainActivity : AppCompatActivity() {
         val stat = StatFs(cacheDir.absolutePath)
         paragraph("Free local space: ${stat.availableBytes / 1048576} MB · safety reserve: ${s.reserveBytes / 1048576} MB")
         row { addView(button("Check engine") { vm.checkHealth() }); addView(button("Clear cache") { vm.clearCache() }); addView(button("Export log") { exportLog.launch("cartube-diagnostics.txt") }) }
-        paragraph("CarTube Downloader 0.1.1 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
+        paragraph("CarTube Downloader 0.1.2 · ARM v7a / ARM64 · yt-dlp, EJS, QuickJS, FFmpeg. Diagnostics are visible in queue errors. GPL-3.0 source and dependency notices in the package repository.")
     }
     override fun onBackPressed() {
         if (page == 3 && playlistId != null) { playlistId = null; render() }
