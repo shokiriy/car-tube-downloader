@@ -1,5 +1,18 @@
 # CarTube Downloader — build and validation report
 
+## Version 0.1.4 — device diagnostic confirmed validator defect
+
+- The user-exported v0.1.3 diagnostic showed yt-dlp downloaded and merged an MP4, then Android MediaExtractor found a `video/avc` track. The merged file had 21,358,581 bytes and complete top-level `ftyp,moov,free,mdat` atoms. The failure was `IllegalArgumentException` while inspecting video sample 0. The validator allocated only 4 KiB for a sample, which is too small for many H.264 keyframes. This evidence narrows the MP4 failure to the app's validation path; playback of that exact file was not independently verified because the app cleaned the temporary file.
+- Source commit [`4ad907f`](https://github.com/shokiriy/car-tube-downloader/commit/4ad907fea231dcb5a39cb89aba0efd32434e6b97) checks `MediaExtractor.sampleSize` without copying a sample into a fixed buffer. It also keeps yt-dlp stderr separate so MP3 extraction errors retain their technical cause. The supplied diagnostic export did not include the MP3 failure; its cause remains unknown.
+- A synthetic H.264/AAC MP4 fixture has a 6,993-byte video sample and an Android instrumentation test that validates it. [GitHub Actions run 39228952461](https://github.com/shokiriy/car-tube-downloader/actions/runs/39228952461) passed `test assembleDebug assembleDebugAndroidTest`; 13 JVM tests passed, 0 failed. CI **compiled** the instrumentation test but did not run it on a device.
+
+| 0.1.4 signed debug APK | Bytes | ABI | SHA-256 |
+| --- | ---: | --- | --- |
+| `CarTube-Downloader-v0.1.4-arm64-v8a-debug.apk` | 77,700,292 | `arm64-v8a` | `8edd99a8c7a44ce8c836f87b23369278e257b3f824a18752311f4e2c736938e9` |
+| `CarTube-Downloader-v0.1.4-armeabi-v7a-debug.apk` | 71,029,102 | `armeabi-v7a` | `92bcbeaeb865e11b899102b28bc6ad5819b76cf2c1cd4a59e7fa9f613cf6df47` |
+
+The v0.1.4 validator fix is **BUILD-VERIFIED ONLY** until a real MP4 is retried and played on the phone/head unit. The MP3 error is **NOT TESTED** in v0.1.4; its next diagnostic export should contain yt-dlp's stderr. The head unit ABI and runtime behavior remain unverified.
+
 ## Version 0.1.3 — second device failure investigation
 
 - A phone screenshot of v0.1.2 showed the system bars no longer overlapping the UI. The MP4 task reached 99.6%, then Android's MediaExtractor reported that it could not open the final file. The exported diagnostic log and actual media bytes were not available; the specific underlying fault remains **NOT TESTED**.
