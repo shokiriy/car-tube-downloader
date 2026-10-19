@@ -27,6 +27,14 @@ class PlaylistRepository(
     suspend fun page(id: String, offset: Int, limit: Int = 50) = dao.playlistPage(id, limit.coerceIn(1, 50), offset.coerceAtLeast(0))
     suspend fun selectAll(id: String, value: Boolean) = dao.selectAll(id, value)
     suspend fun select(id: String, videoId: String, value: Boolean) = dao.selectItem(id, videoId, value)
+    suspend fun selectOnlyNew(id: String): Int {
+        val count = dao.playlist(id)?.newCount ?: 0
+        val newest = dao.newestItems(id, count.coerceAtLeast(0)).filterNot { it.queued }
+        dao.selectAll(id, false)
+        newest.forEach { dao.selectItem(id, it.videoId, true) }
+        return newest.size
+    }
+    suspend fun selectedCount(id: String) = dao.selectedUnqueued(id).size
     suspend fun remove(id: String) = dao.removePlaylist(id)
 
     suspend fun sync(id: String): Int {

@@ -36,6 +36,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val busy = _busy.asStateFlow()
     private val _playlistReady = MutableStateFlow(false)
     val playlistReady = _playlistReady.asStateFlow()
+    private val _loadedPlaylistId = MutableStateFlow<String?>(null)
+    val loadedPlaylistId = _loadedPlaylistId.asStateFlow()
+    private val _playlistRevision = MutableStateFlow(0)
+    val playlistRevision = _playlistRevision.asStateFlow()
     var inputText = ""
     private var analyzedText = ""
     var outputKind = OutputKind.MP3
@@ -72,6 +76,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             is YouTubeTarget.Playlist -> {
                                 app.playlists.add(target.canonicalUrl)
                                 app.playlists.sync(target.id)
+                                _loadedPlaylistId.value = target.id
                                 DiagnosticLog.record(app, "PLAYLIST_TIMING ${target.id}", "elapsed=${SystemClock.elapsedRealtime() - startedAt}ms")
                                 playlistCount++
                                 _playlistReady.value = true
@@ -127,6 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val playlist = app.playlists.add(url, interval, wifi, autoAdd, kind, quality)
             val count = app.playlists.sync(playlist.id)
+            _loadedPlaylistId.value = playlist.id
             PlaylistScheduler.schedule(app)
             _message.value = "Playlist saved: $count items discovered."
             if (autoAdd) DownloadService.start(app)
@@ -150,14 +156,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val q = if (outputKind == OutputKind.MP3) audioQuality.name else videoQuality.name
             val (added, failed) = app.playlists.queueSelected(id, outputKind, q)
+            _playlistRevision.value++
             _message.value = "$added playlist items queued; $failed failed analysis."
             if (added > 0) DownloadService.start(app)
         } catch (e: Exception) { _message.value = e.message ?: "Could not queue playlist." }
         finally { _busy.value = false }
     }
     suspend fun playlistPage(id: String, offset: Int) = app.playlists.page(id, offset, 20)
-    fun playlistSelect(id: String, videoId: String, selected: Boolean) = viewModelScope.launch(Dispatchers.IO) { app.playlists.select(id, videoId, selected) }
-    fun playlistSelectAll(id: String, selected: Boolean) = viewModelScope.launch(Dispatchers.IO) { app.playlists.selectAll(id, selected) }
+    suspend fun playlistSelect(id: String, videoId: String, selected: Boolean) = app.playlists.select(id, videoId, selected)
+    suspend fun playlistSelectAll(id: String, selected: Boolean) = app.playlists.selectAll(id, selected)
+    suspend fun playlistSelectOnlyNew(id: String) = app.playlists.selectOnlyNew(id)
+    suspend fun playlistSelectedCount(id: String) = app.playlists.selectedCount(id)
     fun removePlaylist(id: String) = viewModelScope.launch(Dispatchers.IO) { app.playlists.remove(id); PlaylistScheduler.schedule(app) }
     fun setWifi(value: Boolean) = viewModelScope.launch { app.settings.setWifiOnly(value) }
     fun setAudio(value: String) = viewModelScope.launch { app.settings.setAudio(value) }

@@ -32,6 +32,7 @@ interface CarTubeDao {
     @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId=:id") suspend fun playlistCount(id: String): Int
     @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId=:id AND selected=1") suspend fun selectedCount(id: String): Int
     @Query("SELECT * FROM playlist_items WHERE playlistId=:id AND selected=1 AND queued=0 ORDER BY position") suspend fun selectedUnqueued(id: String): List<PlaylistEntry>
+    @Query("SELECT * FROM playlist_items WHERE playlistId=:id ORDER BY firstSeen DESC, position DESC LIMIT :limit") suspend fun newestItems(id: String, limit: Int): List<PlaylistEntry>
     @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id") suspend fun selectAll(id: String, selected: Boolean)
     @Query("UPDATE playlist_items SET selected=:selected WHERE playlistId=:id AND videoId=:videoId") suspend fun selectItem(id: String, videoId: String, selected: Boolean)
     @Query("UPDATE playlist_items SET queued=1 WHERE playlistId=:id AND videoId=:videoId") suspend fun markQueued(id: String, videoId: String)
