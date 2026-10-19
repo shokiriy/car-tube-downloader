@@ -569,6 +569,9 @@ class MainActivity : AppCompatActivity() {
         }
         private val playerHost = FrameLayout(this@MainActivity).apply { visibility = View.GONE }
         private val title = text("", 13f, ink, true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
+        private val activeTitle = text("", 12f, ink, true).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; visibility = View.GONE
+        }
         private val status = text("", 11f, muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         private val retry = button("↻", Style.QUIET) {}.apply { contentDescription = "Qayta yuklash" }
         private val expand = button("⤢", Style.QUIET) {}.apply { contentDescription = "Katta oynada ko‘rish" }
@@ -599,6 +602,7 @@ class MainActivity : AppCompatActivity() {
             }.apply { contentDescription = "Videoni kattalashtirish" }, LinearLayout.LayoutParams(44.dp, 44.dp))
             line.addView(previewActions)
             root.addView(line)
+            root.addView(activeTitle, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = 45.dp; topMargin = 3.dp })
             root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 45.dp; topMargin = 2.dp })
         }
 
@@ -624,6 +628,7 @@ class MainActivity : AppCompatActivity() {
             duration.text = entry.duration?.let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" } ?: ""
             duration.visibility = if (entry.duration == null) View.GONE else View.VISIBLE
             title.text = entry.title
+            activeTitle.text = entry.title
             frame.setOnClickListener { openInline(entry.videoId) }
             title.setOnClickListener { openInline(entry.videoId) }
             frame.setOnLongClickListener { openLarge(entry.videoId, entry.title); true }
@@ -637,6 +642,7 @@ class MainActivity : AppCompatActivity() {
                 frameParams.width = 0; frameParams.height = 200.dp; frameParams.weight = 1f
                 frameParams.rightMargin = 4.dp
                 details.visibility = View.GONE
+                activeTitle.visibility = View.VISIBLE
                 previewActions.visibility = View.VISIBLE
                 image.visibility = View.GONE; duration.visibility = View.GONE
                 playerHost.visibility = View.VISIBLE
@@ -652,6 +658,7 @@ class MainActivity : AppCompatActivity() {
                 frameParams.width = 112.dp; frameParams.height = 63.dp; frameParams.weight = 0f
                 frameParams.rightMargin = 9.dp
                 details.visibility = View.VISIBLE
+                activeTitle.visibility = View.GONE
                 previewActions.visibility = View.GONE
             }
             frame.layoutParams = frameParams

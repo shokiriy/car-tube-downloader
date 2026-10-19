@@ -83,7 +83,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                         _previews.value = found.toList()
-                        _message.value = "${found.size} ta video topildi, $playlistCount ta pleylist yuklandi, $failed ta xato. Formatni tanlab yuklang."
+                        _message.value = if (found.isEmpty() && playlistCount > 0 && failed == 0) "" else
+                            "${found.size} ta video topildi, $playlistCount ta pleylist yuklandi, $failed ta xato. Formatni tanlab yuklang."
                     } catch (e: Exception) {
                         failed++
                         DiagnosticLog.record(app, "ANALYZE_ERROR", (e as? EngineException)?.diagnostic ?: e.toString())

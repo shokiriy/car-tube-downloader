@@ -3,6 +3,7 @@ package com.shokirjon.cartubedownloader
 import android.content.Intent
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,6 +74,18 @@ class PlaylistScrollInstrumentedTest {
                 assertTrue(kotlin.math.abs(snapshot[1] - list!!.getChildAt(0).top) <= 2)
                 val row = list!!.getChildAt(0) as LinearLayout
                 assertTrue(((row.getChildAt(0) as LinearLayout).getChildAt(0) as CheckBox).isChecked)
+                MainActivity::class.java.getDeclaredField("parkedForPreview").apply { isAccessible = true }
+                    .setBoolean(activity, true)
+                val frame = (row.getChildAt(0) as LinearLayout).getChildAt(1) as FrameLayout
+                frame.performClick()
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                val row = list!!.getChildAt(0) as LinearLayout
+                val frame = (row.getChildAt(0) as LinearLayout).getChildAt(1) as FrameLayout
+                assertEquals("Preview replaces the thumbnail; no second video pane", 3, row.childCount)
+                assertTrue("Embedded player must meet YouTube's minimum size", frame.height >= activity.resources.displayMetrics.density * 200)
+                assertEquals(snapshot[0], list!!.firstVisiblePosition)
             }
         } finally { instrumentation.runOnMainSync { activity.finish() } }
     }
