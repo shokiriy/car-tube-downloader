@@ -1,5 +1,19 @@
 # CarTube Downloader — build and validation report
 
+## Version 0.1.3 — second device failure investigation
+
+- A phone screenshot of v0.1.2 showed the system bars no longer overlapping the UI. The MP4 task reached 99.6%, then Android's MediaExtractor reported that it could not open the final file. The exported diagnostic log and actual media bytes were not available; the specific underlying fault remains **NOT TESTED**.
+- Source commit [`0cadcca`](https://github.com/shokiriy/car-tube-downloader/commit/0cadccafc4dc70fbbe42c365a1ac272724a7269d) now prefers a combined H.264/AAC MP4 at or below the selected resolution before trying separate streams and FFmpeg merge. Failed media validation logs the stage and a bounded MP4 atom summary. Download completion logs the final yt-dlp lines without raw URL parameters.
+- The observed `RD...` auto-generated YouTube Mix link is routed through its originating video's watch URL. An unavailable Mix returns an actionable error. Selection and queueing for standard public playlists remain present, but on-device Mix extraction has not been verified.
+- [GitHub Actions run 39222982463](https://github.com/shokiriy/car-tube-downloader/actions/runs/39222982463) passed `test assembleDebug` and uploaded both ARM APKs. Debug and release unit reports each show 13 tests and 0 failures. No physical phone or head unit was available to execute an MP4 download or playlist scan in CI.
+
+| 0.1.3 signed debug APK | Bytes | ABI | SHA-256 |
+| --- | ---: | --- | --- |
+| `CarTube-Downloader-v0.1.3-arm64-v8a-debug.apk` | 77,700,184 | `arm64-v8a` | `32738f448de01baf919351fdd4968ae7cada5d0afb7c89b6f0d0fe0895c9f23e` |
+| `CarTube-Downloader-v0.1.3-armeabi-v7a-debug.apk` | 71,028,994 | `armeabi-v7a` | `0752bfdaf52e9f6794c6b85f22c442539e7f699ef5e78537500c0ec0ba0b0d88` |
+
+MP4 download and Mix extraction are **BUILD-VERIFIED ONLY** in v0.1.3. A real successful download on the user's phone and exported diagnostics are the next acceptance check. A different CI debug certificate may require uninstalling v0.1.2 before installing v0.1.3; this clears the in-app queue and playlist records.
+
 ## Version 0.1.2 — media output and system-bar fix
 
 - Source commit [`e60ca0b`](https://github.com/shokiriy/car-tube-downloader/commit/e60ca0bbb3c51b4d6a88a4e8c988d6b3b0e986b6) accepts only yt-dlp's final `VIDEO_ID.mp4` or `VIDEO_ID.mp3`, instead of an arbitrary intermediate stream. Android MediaExtractor verifies container, H.264 video/AAC audio or MP3 audio, and readable samples before publication. The downloader screen now applies system status/navigation bar insets in both rotations. `versionCode=3` / `versionName=0.1.2`.
