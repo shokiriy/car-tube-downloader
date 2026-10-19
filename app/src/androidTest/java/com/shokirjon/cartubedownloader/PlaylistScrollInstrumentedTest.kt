@@ -1,11 +1,16 @@
 package com.shokirjon.cartubedownloader
 
 import android.content.Intent
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.PopupWindow
+import android.widget.TextView
+import android.app.AlertDialog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shokirjon.cartubedownloader.db.PlaylistEntry
@@ -77,14 +82,44 @@ class PlaylistScrollInstrumentedTest {
                 MainActivity::class.java.getDeclaredField("parkedForPreview").apply { isAccessible = true }
                     .setBoolean(activity, true)
                 val frame = (row.getChildAt(0) as LinearLayout).getChildAt(1) as FrameLayout
+                snapshot[2] = row.height
                 frame.performClick()
             }
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
                 val row = list!!.getChildAt(0) as LinearLayout
                 val frame = (row.getChildAt(0) as LinearLayout).getChildAt(1) as FrameLayout
-                assertEquals("Preview replaces the thumbnail; no second video pane", 3, row.childCount)
-                assertTrue("Embedded player must meet YouTube's minimum size", frame.height >= activity.resources.displayMetrics.density * 200)
+                assertEquals("Preview never adds another pane to the row", 2, row.childCount)
+                assertTrue("Thumbnail retains its size", frame.height < activity.resources.displayMetrics.density * 90)
+                assertEquals("Preview does not resize the row", snapshot[2], row.height)
+                val popup = MainActivity::class.java.getDeclaredField("miniPreviewPopup").apply { isAccessible = true }
+                    .get(activity) as PopupWindow?
+                assertTrue("Small on-demand preview is visible", popup?.isShowing == true)
+                assertEquals(snapshot[0], list!!.firstVisiblePosition)
+                popup!!.dismiss()
+                val second = list!!.getChildAt(1) as LinearLayout
+                val details = (second.getChildAt(0) as LinearLayout).getChildAt(2) as LinearLayout
+                val actions = details.getChildAt(1) as LinearLayout
+                val expand = actions.getChildAt(actions.childCount - 1) as TextView
+                assertTrue("List fast scroll must not steal expand taps", !list!!.isFastScrollEnabled)
+                val buttonLocation = IntArray(2).also(expand::getLocationOnScreen)
+                val listLocation = IntArray(2).also(list!!::getLocationOnScreen)
+                val x = (buttonLocation[0] - listLocation[0] + expand.width / 2).toFloat()
+                val y = (buttonLocation[1] - listLocation[1] + expand.height / 2).toFloat()
+                val time = SystemClock.uptimeMillis()
+                val down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, x, y, 0)
+                val up = MotionEvent.obtain(time, time + 70, MotionEvent.ACTION_UP, x, y, 0)
+                list!!.dispatchTouchEvent(down)
+                list!!.dispatchTouchEvent(up)
+                down.recycle(); up.recycle()
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                val expected = "v${(snapshot[0] + 1).toString().padStart(10, '0')}"
+                assertEquals("Expand opens the tapped row, not its recycled neighbour", expected,
+                    MainActivity::class.java.getDeclaredField("activePreviewId").apply { isAccessible = true }.get(activity))
+                assertTrue((MainActivity::class.java.getDeclaredField("previewDialog").apply { isAccessible = true }
+                    .get(activity) as AlertDialog?)?.isShowing == true)
                 assertEquals(snapshot[0], list!!.firstVisiblePosition)
             }
         } finally { instrumentation.runOnMainSync { activity.finish() } }

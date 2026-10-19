@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
@@ -25,6 +27,7 @@ import android.widget.BaseAdapter
 import android.widget.AbsListView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.ArrayAdapter
@@ -68,6 +71,8 @@ class MainActivity : AppCompatActivity() {
     private val previewPlayer by lazy { YouTubePreview(this) { id, code -> showEmbedFallback(id, code) } }
     private val localPreview by lazy { LocalVideoPreview(this) }
     private var previewDialog: AlertDialog? = null
+    private var miniPreviewPopup: PopupWindow? = null
+    private var miniPreviewVideo: FrameLayout? = null
     private var activePreviewId: String? = null
     private var unavailablePreviewId: String? = null
     private var embedFailureCode: Int? = null
@@ -524,9 +529,14 @@ class MainActivity : AppCompatActivity() {
             dividerHeight = 1.dp
             setBackgroundColor(bg)
             cacheColorHint = bg
-            isFastScrollEnabled = true
+            // The fast-scroll thumb owns the right edge and steals taps from row actions.
+            isFastScrollEnabled = false
             setOnScrollListener(object : AbsListView.OnScrollListener {
-                override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {}
+                override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {
+                    if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL && miniPreviewPopup != null) {
+                        dismissMiniPreview()
+                    }
+                }
                 override fun onScroll(view: AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {
                     if (state.items.isNotEmpty() && firstVisibleItem + visibleItemCount >= state.items.size - 6) loadNextPage(id)
                     val active = activePreviewId
@@ -567,54 +577,48 @@ class MainActivity : AppCompatActivity() {
             addView(image, FrameLayout.LayoutParams(-1, -1))
             addView(duration, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0, 0, 3.dp, 3.dp) })
         }
-        private val playerHost = FrameLayout(this@MainActivity).apply { visibility = View.GONE }
         private val title = text("", 13f, ink, true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
-        private val activeTitle = text("", 12f, ink, true).apply {
-            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; visibility = View.GONE
-        }
         private val status = text("", 11f, muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         private val retry = button("↻", Style.QUIET) {}.apply { contentDescription = "Qayta yuklash" }
         private val expand = button("⤢", Style.QUIET) {}.apply { contentDescription = "Katta oynada ko‘rish" }
         private val details = column()
-        private val previewActions = column().apply { gravity = Gravity.TOP; visibility = View.GONE }
         private val progressBar = ProgressBar(this@MainActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000; progressTintList = ColorStateList.valueOf(accent)
         }
         private var boundId: String? = null
+        private var boundTitle: String = ""
 
         init {
             root.tag = this
-            frame.addView(playerHost, FrameLayout.LayoutParams(-1, -1))
-            line.addView(check, LinearLayout.LayoutParams(45.dp, 52.dp))
+            line.addView(check, LinearLayout.LayoutParams(48.dp, 52.dp))
             line.addView(frame, LinearLayout.LayoutParams(112.dp, 63.dp).apply { rightMargin = 9.dp })
             details.addView(title)
             val small = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
             small.addView(status, LinearLayout.LayoutParams(0, -2, 1f))
-            small.addView(retry, LinearLayout.LayoutParams(38.dp, 38.dp))
-            small.addView(expand, LinearLayout.LayoutParams(38.dp, 38.dp))
+            small.addView(retry, LinearLayout.LayoutParams(48.dp, 48.dp))
+            small.addView(expand, LinearLayout.LayoutParams(48.dp, 48.dp))
             details.addView(small)
             line.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-            previewActions.addView(button("×", Style.QUIET) { openInline(boundId ?: return@button) }
-                .apply { contentDescription = "Kichik videoni yopish" }, LinearLayout.LayoutParams(44.dp, 44.dp))
-            previewActions.addView(button("⤢", Style.QUIET) {
-                val id = boundId ?: return@button
-                openLarge(id, title.text.toString())
-            }.apply { contentDescription = "Videoni kattalashtirish" }, LinearLayout.LayoutParams(44.dp, 44.dp))
-            line.addView(previewActions)
             root.addView(line)
-            root.addView(activeTitle, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = 45.dp; topMargin = 3.dp })
-            root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 45.dp; topMargin = 2.dp })
+            root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 48.dp; topMargin = 2.dp })
+            frame.setOnClickListener { boundId?.let { openInline(it, frame) } }
+            title.setOnClickListener { boundId?.let { openInline(it, frame) } }
+            frame.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
+            title.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
+            expand.setOnClickListener { boundId?.let { openLarge(it, boundTitle) } }
         }
 
         fun bind(entry: PlaylistEntry) {
             if (boundId != entry.videoId) images.unbind(image)
             boundId = entry.videoId
+            boundTitle = entry.title
             root.setBackgroundColor(if (entry.selected) Color.rgb(19, 48, 54) else bg)
             check.setOnCheckedChangeListener(null)
             check.isChecked = entry.selected && !entry.queued
             check.isEnabled = !entry.queued
             check.contentDescription = "${entry.title}: ${if (check.isChecked) "tanlangan" else "tanlash"}"
             check.setOnCheckedChangeListener { _, checked ->
+                if (miniPreviewPopup != null) dismissMiniPreview()
                 val id = playlistId ?: return@setOnCheckedChangeListener
                 paging?.update(entry.videoId) { it.copy(selected = checked) }
                 root.setBackgroundColor(if (checked) Color.rgb(19, 48, 54) else bg)
@@ -628,40 +632,8 @@ class MainActivity : AppCompatActivity() {
             duration.text = entry.duration?.let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" } ?: ""
             duration.visibility = if (entry.duration == null) View.GONE else View.VISIBLE
             title.text = entry.title
-            activeTitle.text = entry.title
-            frame.setOnClickListener { openInline(entry.videoId) }
-            title.setOnClickListener { openInline(entry.videoId) }
-            frame.setOnLongClickListener { openLarge(entry.videoId, entry.title); true }
-            title.setOnLongClickListener { openLarge(entry.videoId, entry.title); true }
-            expand.setOnClickListener { openLarge(entry.videoId, entry.title) }
+            expand.contentDescription = "${entry.title}: katta oynada ko‘rish"
             showStatus(entry)
-            val inline = activePreviewId == entry.videoId && previewDialog?.isShowing != true
-            val frameParams = frame.layoutParams as LinearLayout.LayoutParams
-            if (inline) {
-                // Replace the thumbnail in place. The official embed requires at least 200x200 CSS pixels.
-                frameParams.width = 0; frameParams.height = 200.dp; frameParams.weight = 1f
-                frameParams.rightMargin = 4.dp
-                details.visibility = View.GONE
-                activeTitle.visibility = View.VISIBLE
-                previewActions.visibility = View.VISIBLE
-                image.visibility = View.GONE; duration.visibility = View.GONE
-                playerHost.visibility = View.VISIBLE
-                if (unavailablePreviewId == entry.videoId) embedFallback(playerHost, entry.videoId)
-                else attachPreview(playerHost, entry.videoId)
-            } else {
-                if (playerHost.childCount > 0) {
-                    closePreview()
-                    playerHost.removeAllViews()
-                }
-                playerHost.visibility = View.GONE
-                image.visibility = View.VISIBLE
-                frameParams.width = 112.dp; frameParams.height = 63.dp; frameParams.weight = 0f
-                frameParams.rightMargin = 9.dp
-                details.visibility = View.VISIBLE
-                activeTitle.visibility = View.GONE
-                previewActions.visibility = View.GONE
-            }
-            frame.layoutParams = frameParams
         }
 
         fun showStatus(entry: PlaylistEntry) {
@@ -781,22 +753,66 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Bekor", null).show()
     }
 
-    private fun openInline(id: String) = confirmPreview {
-        val list = playlistList
-        val first = list?.firstVisiblePosition ?: 0
-        val top = list?.getChildAt(0)?.top ?: 0
-        if (activePreviewId == id) {
-            activePreviewId = null; closePreview()
-        } else {
-            closePreview(); unavailablePreviewId = null; embedFailureCode = null; activePreviewId = id
+    private fun openInline(id: String, anchor: View) = confirmPreview {
+        if (!anchor.isAttachedToWindow) return@confirmPreview
+        if (miniPreviewPopup != null && activePreviewId == id) {
+            dismissMiniPreview()
+            return@confirmPreview
         }
-        playlistAdapter?.notifyDataSetChanged()
-        list?.setSelectionFromTop(first, top)
+        closePreview()
+        unavailablePreviewId = null
+        embedFailureCode = null
+        activePreviewId = id
+        // YouTube's official embed needs at least 200×200 CSS pixels. A nonmodal
+        // overlay keeps the 112×63 thumbnail and every ListView row at its usual size.
+        val width = minOf(320.dp, resources.displayMetrics.widthPixels - 24.dp)
+        val body = column().apply { background = shape(surface, 12); setPadding(5.dp, 4.dp, 5.dp, 5.dp) }
+        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        toolbar.addView(text("Ko‘rish", 12f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        val popup = PopupWindow(body, width, 252.dp, false).apply {
+            setBackgroundDrawable(ColorDrawable(surface))
+            isOutsideTouchable = true
+            elevation = 8.dp.toFloat()
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+        }
+        toolbar.addView(button("⤢", Style.QUIET) { openLarge(id, paging?.items?.firstOrNull { it.videoId == id }?.title.orEmpty()) }
+            .apply { contentDescription = "Videoni kattalashtirish" }, LinearLayout.LayoutParams(48.dp, 42.dp))
+        toolbar.addView(button("×", Style.QUIET) { dismissMiniPreview() }
+            .apply { contentDescription = "Kichik videoni yopish" }, LinearLayout.LayoutParams(48.dp, 42.dp))
+        body.addView(toolbar)
+        val video = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        body.addView(video, LinearLayout.LayoutParams(-1, 200.dp))
+        popup.setOnDismissListener {
+            if (miniPreviewPopup === popup) {
+                miniPreviewPopup = null; miniPreviewVideo = null
+                closePreview(); activePreviewId = null
+            }
+        }
+        miniPreviewPopup = popup
+        miniPreviewVideo = video
+        val anchorPosition = IntArray(2)
+        anchor.getLocationOnScreen(anchorPosition)
+        val safe = Rect().apply { root.getGlobalVisibleRect(this) }
+        val x = anchorPosition[0].coerceIn(safe.left + 8.dp, maxOf(safe.left + 8.dp, safe.right - width - 8.dp))
+        val y = anchorPosition[1].coerceIn(safe.top + 8.dp, maxOf(safe.top + 8.dp, safe.bottom - 252.dp - 8.dp))
+        // showAtLocation does not ask ListView to scroll the tapped row into view.
+        popup.showAtLocation(root, Gravity.TOP or Gravity.LEFT, x, y)
+        attachPreview(video, id)
+    }
+
+    private fun dismissMiniPreview(release: Boolean = true) {
+        val popup = miniPreviewPopup ?: return
+        miniPreviewPopup = null
+        miniPreviewVideo = null
+        popup.dismiss()
+        if (release) { closePreview(); activePreviewId = null }
     }
 
     private fun openLarge(id: String, title: String) = confirmPreview {
-        if (activePreviewId != id) { closePreview(); unavailablePreviewId = null; embedFailureCode = null; activePreviewId = id }
         previewDialog?.dismiss()
+        if (activePreviewId != id) { closePreview(); unavailablePreviewId = null; embedFailureCode = null }
+        else dismissMiniPreview(release = false)
+        activePreviewId = id
         val body = column().apply { setPadding(10.dp, 10.dp, 10.dp, 10.dp); background = shape(bg, 12) }
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         top.addView(text(title, 14f, ink, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -808,13 +824,10 @@ class MainActivity : AppCompatActivity() {
         val width = minOf(resources.displayMetrics.widthPixels - 42.dp, 760.dp)
         body.addView(video, LinearLayout.LayoutParams(-1, (width * 9f / 16f).toInt().coerceAtLeast(200.dp)))
         dialog.setOnDismissListener {
-            previewDialog = null
-            val list = playlistList
-            val state = paging
-            val at = state?.items?.indexOfFirst { it.videoId == id } ?: -1
-            if (list != null && at in list.firstVisiblePosition until (list.firstVisiblePosition + list.childCount)) {
-                playlistAdapter?.notifyDataSetChanged()
-            } else { closePreview(); activePreviewId = null }
+            if (previewDialog === dialog) {
+                previewDialog = null; modalVideo = null
+                closePreview(); activePreviewId = null
+            }
         }
         dialog.show()
         previewDialog = dialog
@@ -834,7 +847,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun closePreview() { previewPlayer.close(); localPreview.close() }
+    private fun closePreview() {
+        dismissMiniPreview(release = false)
+        previewPlayer.close()
+        localPreview.close()
+    }
 
     private fun showEmbedFallback(failedVideoId: String?, code: Int?) {
         val id = activePreviewId?.takeIf { it == failedVideoId } ?: return
@@ -843,7 +860,7 @@ class MainActivity : AppCompatActivity() {
         unavailablePreviewId = id
         previewPlayer.close()
         if (previewDialog?.isShowing == true) modalVideo?.let { embedFallback(it, id) }
-        else playlistAdapter?.notifyDataSetChanged()
+        else miniPreviewVideo?.let { embedFallback(it, id) }
     }
 
     private fun embedFallback(parent: FrameLayout, id: String) {
