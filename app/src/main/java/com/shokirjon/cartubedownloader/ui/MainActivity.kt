@@ -36,6 +36,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.shokirjon.cartubedownloader.core.AudioQuality
+import com.shokirjon.cartubedownloader.core.FormatSelector
 import com.shokirjon.cartubedownloader.core.OutputKind
 import com.shokirjon.cartubedownloader.core.VideoQuality
 import com.shokirjon.cartubedownloader.db.DownloadTask
@@ -385,6 +386,8 @@ class MainActivity : AppCompatActivity() {
             val texts = column()
             texts.addView(text(data.title, 14f, ink, true).apply { maxLines = 2 })
             texts.addView(text(listOfNotNull(data.channel.takeIf(String::isNotBlank), data.duration?.let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }, data.size?.let { "~${it / 1048576} MB" }).joinToString(" · "), 11f, muted).apply { maxLines = 2 })
+            val heights = FormatSelector.compatible(data.formats, 720).mapNotNull { it.height }.distinct().sorted()
+            texts.addView(text(if (heights.isEmpty()) "MP4: mos format aniqlanmadi" else "MP4: ${heights.joinToString(" / ") { "${it}p" }}", 11f, accent).apply { maxLines = 1 })
             card.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
             parent.addView(card, spaced(bottom = 7))
         }
