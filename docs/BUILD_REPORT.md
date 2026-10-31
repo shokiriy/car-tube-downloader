@@ -1,5 +1,19 @@
 # CarTube Downloader — build and validation report
 
+## Version 0.2.0 — Android 8.1 / API 27
+
+- Source APK commit [`a82be1b`](https://github.com/shokiriy/car-tube-downloader/commit/a82be1ba983e5b2fd69ca600fd39b829a5034b0f); [GitHub Actions run 41190908550](https://github.com/shokiriy/car-tube-downloader/actions/runs/41190908550) passed both build and Android 8.1 emulator jobs.
+- `minSdk=27`, `targetSdk=35`, versionCode 11. ARMv7 and ARM64 debug APKs were built and aapt confirmed `sdkVersion:'27'` for both. Each APK contains only its named native ABI, including Python, QuickJS, FFmpeg and FFprobe. The Android 8.1 emulator uses an x86 test build; bundled ARM extractor runtime was **not** executed there.
+- Debug and release JVM unit tests: 19 each, 0 failures. Android 8.1 emulator: 9 instrumentation tests, 0 failures. The legacy publisher test validates a synthetic H.264/AAC MP4, copies it into public `Movies/CarTube`, then reads the bytes back through its MediaStore URI. The playlist scroll test selects item 80 and checks visible position/offset. Live YouTube metadata extraction, MP3/MP4 download, and playback on the user's alpsYT9250L head unit remain **NOT TESTED** in this version.
+- Android 8.1/9 now request file storage permission for the default public folder. The UI waits briefly for the mounted storage to become writable after a new grant and reports an actionable error if it does not. A user-selected USB/SD folder uses SAF. Android 10+ keep the scoped-storage implementation.
+
+| Debug APK | Bytes | ABI | SHA-256 |
+| --- | ---: | --- | --- |
+| `CarTube-Downloader-v0.2.0-Android8-armeabi-v7a.apk` | 57,308,854 | `armeabi-v7a` | `fd391956bf7f9464462e198cbf072d4676c1412f900ea61f19c60394c986693d` |
+| `CarTube-Downloader-v0.2.0-Android8-arm64-v8a.apk` | 63,980,040 | `arm64-v8a` | `ccb7e5af2f80757400123c03205cb54f092536d3be0df9dd3abef1ca37a454b4` |
+
+Installation: check the head unit's supported ABI; install the matching APK, permit installation from your file manager, then allow storage access for the first download on Android 8.1. If an old CI debug APK has a different signature, uninstall it first; that removes the app database, so finish queued work before uninstalling. Existing published media stays in shared storage. A physical device test is still needed to confirm its ABI, engine initialization, current YouTube extraction, real download, and playback.
+
 ## Version 0.1.4 — device diagnostic confirmed validator defect
 
 - The user-exported v0.1.3 diagnostic showed yt-dlp downloaded and merged an MP4, then Android MediaExtractor found a `video/avc` track. The merged file had 21,358,581 bytes and complete top-level `ftyp,moov,free,mdat` atoms. The failure was `IllegalArgumentException` while inspecting video sample 0. The validator allocated only 4 KiB for a sample, which is too small for many H.264 keyframes. This evidence narrows the MP4 failure to the app's validation path; playback of that exact file was not independently verified because the app cleaned the temporary file.
@@ -57,7 +71,7 @@ Orientation and the paste flow are **BUILD-VERIFIED ONLY** until checked on an a
 
 The old local debug APK's signing certificate SHA-256 is `18033da2e0dfca495df55e5f059fb4c2a0c0b5522c94ac20efcaea529bed724e`; the 0.1.1 CI APK's is `92497bb459b65c09883234d9c8fa3411200ef11338586b9212437403154f82e4`. An installed 0.1.0 debug APK signed with the former certificate must be uninstalled before installing this 0.1.1 APK. This removes the in-app queue and library records, though completed files in shared MediaStore or a selected external folder remain. Future upgrades require a stable private release signing key.
 
-## Environment and versions
+## Archived initial 0.1.0 environment and versions
 
 - Source branch: [`main`](https://github.com/shokiriy/car-tube-downloader/tree/main), pushed to `shokiriy/car-tube-downloader`
 - JDK 17.0.20; Gradle 8.13; Android Gradle Plugin 8.13.2; Kotlin 2.3.20
