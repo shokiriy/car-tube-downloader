@@ -2,6 +2,7 @@ package com.shokirjon.cartubedownloader.storage
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.Build
 import com.shokirjon.cartubedownloader.core.EngineException
 import com.shokirjon.cartubedownloader.core.ErrorCategory
 import com.shokirjon.cartubedownloader.core.OutputKind
@@ -40,7 +41,11 @@ class MediaValidator {
                     // Sample payloads can exceed 4 KiB, especially H.264 keyframes. We only
                     // need to confirm a sample exists; no payload allocation or seek is needed.
                     stage = "inspecting sample $index ($mime)"
-                    if (extractor.sampleSize <= 0L)
+                    // getSampleSize() was added after Android 8.1; sampleTime is
+                    // available there and is -1 only when no sample can be read.
+                    val empty = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) extractor.sampleSize <= 0L
+                        else extractor.sampleTime < 0L
+                    if (empty)
                         throw EngineException(ErrorCategory.CONVERSION, "The output contains an empty media track.", "track=$mime, bytes=${file.length()}")
                     extractor.unselectTrack(index)
                 }

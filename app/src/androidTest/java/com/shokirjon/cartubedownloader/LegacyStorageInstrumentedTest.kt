@@ -19,8 +19,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LegacyStorageInstrumentedTest {
     @Test
-    fun android81PublishesPlayableMp4IntoPublicMovies() = runBlocking {
+    fun android81PublishesPlayableMp4IntoPublicMovies() {
         assumeTrue(Build.VERSION.SDK_INT == 27)
+        runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -44,6 +45,7 @@ class LegacyStorageInstrumentedTest {
         } finally {
             published?.let { context.contentResolver.delete(it, null, null) }
             source.delete()
+        }
         }
     }
 }

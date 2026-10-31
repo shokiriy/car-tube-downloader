@@ -2,6 +2,8 @@ package com.shokirjon.cartubedownloader
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.Build
+import java.nio.ByteBuffer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shokirjon.cartubedownloader.core.OutputKind
@@ -26,7 +28,9 @@ class MediaValidatorInstrumentedTest {
                     extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME) == "video/avc"
                 }
                 extractor.selectTrack(videoIndex)
-                assertTrue("Fixture must exercise the former 4 KiB buffer limit", extractor.sampleSize > 4096L)
+                val bytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) extractor.sampleSize
+                    else extractor.readSampleData(ByteBuffer.allocate(64 * 1024), 0).toLong()
+                assertTrue("Fixture must exercise the former 4 KiB buffer limit", bytes > 4096L)
             } finally { extractor.release() }
             MediaValidator().validate(output, OutputKind.MP4)
         } finally { output.delete() }

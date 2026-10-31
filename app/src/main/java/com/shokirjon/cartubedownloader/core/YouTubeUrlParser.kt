@@ -25,7 +25,7 @@ object YouTubeUrlParser {
         require(host in hosts && uri.userInfo == null) { "Only public YouTube links are supported." }
         val query = uri.rawQuery.orEmpty().split('&').mapNotNull { item ->
             val pair = item.split('=', limit = 2)
-            if (pair.size == 2) pair[0] to URLDecoder.decode(pair[1], StandardCharsets.UTF_8) else null
+            if (pair.size == 2) pair[0] to URLDecoder.decode(pair[1], StandardCharsets.UTF_8.name()) else null
         }.toMap()
         val list = query["list"]?.takeIf(playlistId::matches)
         val path = uri.path.orEmpty().trimEnd('/')
