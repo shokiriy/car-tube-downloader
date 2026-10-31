@@ -93,7 +93,9 @@ class StoragePublisher(private val context: Context, private val settings: Setti
         val publicFolder = if (kind == OutputKind.MP3) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES
         val directory = File(Environment.getExternalStoragePublicDirectory(publicFolder), "CarTube")
         try {
-            if (!directory.isDirectory && !directory.mkdirs()) throw IllegalStateException("Cannot create ${directory.absolutePath}")
+            if (!directory.isDirectory && !directory.mkdirs()) throw IllegalStateException(
+                "Cannot create ${directory.absolutePath}; externalState=${Environment.getExternalStorageState()}, " +
+                    "parentExists=${directory.parentFile?.exists()}, parentWritable=${directory.parentFile?.canWrite()}")
             if (StatFs(directory.absolutePath).availableBytes < file.length() + reserveBytes)
                 throw EngineException(ErrorCategory.STORAGE_FULL, "Not enough space in the destination. Free up at least 1 GB.")
             val name = uniqueName(base, extension) { File(directory, it).exists() }

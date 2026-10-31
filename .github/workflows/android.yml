@@ -52,8 +52,12 @@ jobs:
           api-level: 27
           arch: x86
           target: default
+          sdcard-path-or-size: 2048M
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          script: ./gradlew connectedDebugAndroidTest -PciEmulator=true --stacktrace
+          script: |
+            adb shell df -h /storage/emulated/0
+            adb shell ls -ld /storage/emulated/0 /storage/emulated/0/Movies
+            ./gradlew connectedDebugAndroidTest -PciEmulator=true --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
