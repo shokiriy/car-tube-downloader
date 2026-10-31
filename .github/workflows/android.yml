@@ -56,7 +56,8 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: |
             adb shell df -h /storage/emulated/0
-            adb shell ls -ld /storage/emulated/0 /storage/emulated/0/Movies
+            ./gradlew assembleDebug -PciEmulator=true
+            adb install -r -g app/build/outputs/apk/debug/app-x86-debug.apk
             ./gradlew connectedDebugAndroidTest -PciEmulator=true --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()

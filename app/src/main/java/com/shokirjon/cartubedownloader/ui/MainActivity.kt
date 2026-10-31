@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 18199)
+Total output lines: 1223
+
 package com.shokirjon.cartubedownloader.ui
 
 import android.Manifest
@@ -14,6 +17,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
 import android.os.Build
+import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
 import android.view.Gravity
@@ -56,6 +60,7 @@ import com.shokirjon.cartubedownloader.db.PlaylistEntry
 import com.shokirjon.cartubedownloader.diagnostics.DiagnosticLog
 import com.shokirjon.cartubedownloader.player.PlayerActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
@@ -124,13 +129,24 @@ class MainActivity : AppCompatActivity() {
     private val requestLegacyStorage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val save = pendingSave
         pendingSave = null
-        if (granted) save?.invoke()
-        else toast("Fayl saqlash ruxsati berilmadi. Sozlamalarda USB/SD papkasini tanlang.")
+        if (granted) lifecycleScope.launch {
+            // On Android 8, the storage mount can become writable shortly after the permission callback.
+            repeat(30) {
+                if (legacyFolderWritable()) { save?.invoke(); return@launch }
+                delay(100)
+            }
+            toast("Xotira ruxsati hali faollashmadi. Ilovani qayta oching yoki USB/SD papkasini tanlang.")
+        } else toast("Fayl saqlash ruxsati berilmadi. Sozlamalarda USB/SD papkasini tanlang.")
     }
+    private fun legacyFolderWritable(): Boolean =
+        Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED &&
+            Environment.getExternalStorageDirectory().canWrite()
     private fun withStorageAccess(save: () -> Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q || vm.settings.value.folderUri != null ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q || vm.settings.value.folderUri != null) {
             save()
+        } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            if (legacyFolderWritable()) save()
+            else toast("Umumiy xotiraga yozib bo‘lmadi. Ilovani qayta oching yoki USB/SD papkasini tanlang.")
         } else {
             pendingSave = save
             requestLegacyStorage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -615,17 +631,7 @@ class MainActivity : AppCompatActivity() {
             details.addView(title)
             val small = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
             small.addView(status, LinearLayout.LayoutParams(0, -2, 1f))
-            small.addView(retry, LinearLayout.LayoutParams(48.dp, 48.dp))
-            small.addView(expand, LinearLayout.LayoutParams(48.dp, 48.dp))
-            details.addView(small)
-            line.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-            root.addView(line)
-            root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 48.dp; topMargin = 2.dp })
-            frame.setOnClickListener { boundId?.let { openInline(it, frame) } }
-            title.setOnClickListener { boundId?.let { openInline(it, frame) } }
-            frame.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
-            title.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
-            expand.setOnClickListener { boundId?.let { openLarge(it, boundTitle) } }
+…199 tokens truncated…r { boundId?.let { openLarge(it, boundTitle) } }
         }
 
         fun bind(entry: PlaylistEntry) {
