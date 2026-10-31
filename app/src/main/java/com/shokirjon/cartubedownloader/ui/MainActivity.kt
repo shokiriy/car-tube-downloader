@@ -1,8 +1,10 @@
 package com.shokirjon.cartubedownloader.ui
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
@@ -11,6 +13,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
+import android.os.Build
 import android.os.StatFs
 import android.os.SystemClock
 import android.view.Gravity
@@ -37,6 +40,7 @@ import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -116,6 +120,22 @@ class MainActivity : AppCompatActivity() {
     private var libraryCount = 0
     private var lastCompletedCount = 0
     private var taskByVideo: Map<String, DownloadTask> = emptyMap()
+    private var pendingSave: (() -> Unit)? = null
+    private val requestLegacyStorage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val save = pendingSave
+        pendingSave = null
+        if (granted) save?.invoke()
+        else toast("Fayl saqlash ruxsati berilmadi. Sozlamalarda USB/SD papkasini tanlang.")
+    }
+    private fun withStorageAccess(save: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q || vm.settings.value.folderUri != null ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            save()
+        } else {
+            pendingSave = save
+            requestLegacyStorage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
     private val exportLog = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) try {
             contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(DiagnosticLog.read(this)) }
@@ -441,7 +461,7 @@ class MainActivity : AppCompatActivity() {
         parent.addView(toolbar, spaced(bottom = 7))
         parent.addView(button("Yuklash ($selected)", Style.PRIMARY) {
             if (!vm.analysisMatchesInput()) { toast("Havola o‘zgardi. Qayta tahlil qiling."); return@button }
-            vm.queueSelected()
+            withStorageAccess { vm.queueSelected() }
         }.apply { isEnabled = selected > 0 && !vm.busy.value }, LinearLayout.LayoutParams(-1, 48.dp).apply { bottomMargin = 12.dp })
         previews.forEachIndexed { index, item ->
             val data = item.info
@@ -519,7 +539,7 @@ class MainActivity : AppCompatActivity() {
         val actionRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         selectionCount = text("0 ta tanlandi", 11f, muted)
         actionRow.addView(selectionCount, LinearLayout.LayoutParams(0, -2, 1f))
-        playlistCta = button("Yuklash (0)", Style.PRIMARY) { vm.queuePlaylist(id) }.apply { isEnabled = false }
+        playlistCta = button("Yuklash (0)", Style.PRIMARY) { withStorageAccess { vm.queuePlaylist(id) } }.apply { isEnabled = false }
         actionRow.addView(playlistCta, LinearLayout.LayoutParams(126.dp, 44.dp))
         parent.addView(actionRow, spaced(bottom = 3))
         val state = PlaylistPagingState(id)

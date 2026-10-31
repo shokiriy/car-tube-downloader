@@ -11,10 +11,10 @@ android {
     compileSdk = 36
     defaultConfig {
         applicationId = "com.shokirjon.cartubedownloader"
-        minSdk = 30
+        minSdk = 27
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.1.9"
+        versionCode = 11
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -37,6 +37,7 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a")
+            if (providers.gradleProperty("ciEmulator").orNull == "true") include("x86")
             isUniversalApk = false
         }
     }
