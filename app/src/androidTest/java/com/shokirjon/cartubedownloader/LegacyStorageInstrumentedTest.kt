@@ -1,9 +1,9 @@
 package com.shokirjon.cartubedownloader
 
 import android.Manifest
+import android.os.Build
 import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shokirjon.cartubedownloader.core.OutputKind
 import com.shokirjon.cartubedownloader.settings.SettingsStore
@@ -12,13 +12,15 @@ import com.shokirjon.cartubedownloader.storage.StoragePublisher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LegacyStorageInstrumentedTest {
-    @Test @SdkSuppress(minSdkVersion = 27, maxSdkVersion = 27)
+    @Test
     fun android81PublishesPlayableMp4IntoPublicMovies() = runBlocking {
+        assumeTrue(Build.VERSION.SDK_INT == 27)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
