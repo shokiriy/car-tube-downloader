@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 18199)
-Total output lines: 1223
-
 package com.shokirjon.cartubedownloader.ui
 
 import android.Manifest
@@ -631,7 +628,17 @@ class MainActivity : AppCompatActivity() {
             details.addView(title)
             val small = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
             small.addView(status, LinearLayout.LayoutParams(0, -2, 1f))
-…199 tokens truncated…r { boundId?.let { openLarge(it, boundTitle) } }
+            small.addView(retry, LinearLayout.LayoutParams(48.dp, 48.dp))
+            small.addView(expand, LinearLayout.LayoutParams(48.dp, 48.dp))
+            details.addView(small)
+            line.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            root.addView(line)
+            root.addView(progressBar, LinearLayout.LayoutParams(-1, 3.dp).apply { leftMargin = 48.dp; topMargin = 2.dp })
+            frame.setOnClickListener { boundId?.let { openInline(it, frame) } }
+            title.setOnClickListener { boundId?.let { openInline(it, frame) } }
+            frame.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
+            title.setOnLongClickListener { boundId?.let { openLarge(it, boundTitle) }; true }
+            expand.setOnClickListener { boundId?.let { openLarge(it, boundTitle) } }
         }
 
         fun bind(entry: PlaylistEntry) {
