@@ -1,8 +1,11 @@
 package com.shokirjon.cartubedownloader
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shokirjon.cartubedownloader.core.OutputKind
@@ -24,7 +27,11 @@ class LegacyStorageInstrumentedTest {
         runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.WRITE_EXTERNAL_STORAGE}"
+        )).bufferedReader().use { it.readText() }
+        assertEquals(PackageManager.PERMISSION_GRANTED,
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE))
         val source = context.cacheDir.resolve("legacy-publish-fixture.mp4")
         var published: android.net.Uri? = null
         try {
